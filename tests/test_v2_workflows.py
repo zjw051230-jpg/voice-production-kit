@@ -647,9 +647,11 @@ def test_documents() -> dict:
         "api": PACKAGE / "API与CCSwitch配置.md",
         "manual": PACKAGE / "详细使用手册.md",
         "announcement": PACKAGE / "v2.1更新公告.md",
+        "first_install": PACKAGE / "首次安装说明.md",
         "quick": Path(r"D:\配音工具总结\文档\v2.1\配音工作流使用说明.md"),
         "published_manual": Path(r"D:\配音工具总结\文档\v2.1\配音工具详细使用手册.md"),
         "published_announcement": Path(r"D:\配音工具总结\文档\v2.1\v2.1更新公告.md"),
+        "published_first_install": Path(r"D:\配音工具总结\文档\v2.1\首次安装说明.md"),
     }
     for path in docs.values():
         assert path.is_file() and path.stat().st_size > 300
@@ -660,6 +662,7 @@ def test_documents() -> dict:
         assert required in combined, f"documentation missing: {required}"
     assert docs["manual"].read_bytes() == docs["published_manual"].read_bytes()
     assert docs["announcement"].read_bytes() == docs["published_announcement"].read_bytes()
+    assert docs["first_install"].read_bytes() == docs["published_first_install"].read_bytes()
     assert docs["quick"].stat().st_size < docs["manual"].stat().st_size
     announcement = docs["announcement"].read_text(encoding="utf-8-sig")
     for required in (
@@ -670,8 +673,17 @@ def test_documents() -> dict:
     ):
         assert required in announcement, f"update announcement missing: {required}"
     assert announcement.count("```text") == 1
+    first_install = docs["first_install"].read_text(encoding="utf-8-sig")
+    for required in (
+        "真正的首次安装", "install.ps1", "真正首次安装不要添加 -Force",
+        "Seedance API配置工具", "configure_ccswitch_model.py --dry-run",
+        "bootstrap-status", "verify-access", "不得调用 Seedance",
+    ):
+        assert required in first_install, f"first install guide missing: {required}"
+    assert first_install.count("```text") == 1
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8-sig")
     assert "docs/v2.1更新公告.md" in readme
+    assert "docs/首次安装说明.md" in readme
     manual = docs["manual"].read_text(encoding="utf-8-sig")
     assert len(manual.encode("utf-8")) > 18000
     for section in ("第一次使用", "日常生产", "故障处理", "状态说明", "交付检查清单", "参考资料"):

@@ -52,6 +52,7 @@ def main() -> int:
         "API与CCSwitch配置.md",
         "详细使用手册.md",
         "v2.1更新公告.md",
+        "首次安装说明.md",
         "配置Seedance API.ps1",
         "install-ccswitch.ps1",
         "scripts/configure_ccswitch_model.py",
