@@ -29,7 +29,7 @@ from manage_api_pool import (
     signal_balance_exhausted,
 )
 from run_pipeline import require_terminal_for_pullback, terminal_summary
-from voice_dashboard import derive_status, resolve_completed
+from voice_dashboard import STAGE_ORDER, derive_status, resolve_completed, scan_workspace, status_details
 
 
 def assert_no_secret(path: Path, secrets: list[str]) -> None:
@@ -470,6 +470,17 @@ def test_terminal_and_dashboard(root: Path) -> dict:
     assert status == "可拉回" and dashboard["terminal"] and not dashboard["deliverables_ready"]
     status, dashboard = derive_status(task, [{"status": "failed"}, {"status": "cancelled"}], "已选中")
     assert status == "已结束（全部失败）" and dashboard["terminal"] and not dashboard["deliverables_ready"]
+    status, dashboard = derive_status(task, [], "未知")
+    assert status == "素材未登记"
+    assert status_details(status, dashboard, "未知")["next_action"] == "登记角色素材"
+    missing = root / "missing.mp4"
+    status, dashboard = derive_status(task, [{"status": "downloaded", "output": str(missing),
+                                               "mp3": str(root / "missing.mp3")}], "缺失")
+    assert status == "成品缺失", "远端任务存在后，素材缺失不能覆盖真实成品状态"
+    assert dashboard["missing_deliverables"] == 1
+    status, dashboard = derive_status(task, [{"status": "completed"}], "缺失")
+    assert status == "可拉回", "远端任务存在后必须优先显示真实生产状态"
+    assert STAGE_ORDER == ["准备中", "生产中", "待拉回", "需处理", "已交付"]
 
     workspace = root / "dashboard-terminal"
     project = workspace / "项目"
@@ -495,8 +506,13 @@ def test_terminal_and_dashboard(root: Path) -> dict:
     state_root.joinpath(".seedance-state.json").write_text(json.dumps({"jobs": jobs}, ensure_ascii=False), encoding="utf-8")
     row, files = resolve_completed(workspace, "项目::TDB_1")
     assert row["status"] == "已结束（含失败）" and row["complete"] is True
+    assert row["stage"] == "已交付" and row["requires_attention"] is True
+    assert row["next_action"] == "检查失败版本或打开成品"
+    assert row["duration"] == "4秒" and row["source_name"] == "TDB+1个任务.json"
+    assert row["updated_at"] and scan_workspace(workspace)[0]["source"]
     assert set(files) == {video.resolve(), mp3.resolve()}
-    return {"pullback_terminal_gate": "OK", "dashboard_terminal_counts": "OK"}
+    return {"pullback_terminal_gate": "OK", "dashboard_terminal_counts": "OK",
+            "dashboard_smart_states": "OK"}
 
 
 def test_prompt_manifest_and_provenance(root: Path) -> dict:
@@ -596,12 +612,24 @@ def test_documents() -> dict:
     for path in docs.values():
         assert path.is_file() and path.stat().st_size > 300
         text = path.read_text(encoding="utf-8-sig")
-        assert "v2.0" in text and "v1.0.9" not in text
+        assert "v2.1" in text and "v1.0.9" not in text
     combined = "\n".join(path.read_text(encoding="utf-8-sig") for path in docs.values())
     for required in ("创建项目", "Seedance API配置工具", "立即写", "余额不足", "5.5", "dpskv4", "D:\\codex-board"):
         assert required in combined, f"documentation missing: {required}"
     assert docs["manual"].read_bytes() == docs["published_manual"].read_bytes()
     assert docs["quick"].stat().st_size < docs["manual"].stat().st_size
+    manual = docs["manual"].read_text(encoding="utf-8-sig")
+    assert len(manual.encode("utf-8")) > 18000
+    for section in ("第一次使用", "日常生产", "故障处理", "状态说明", "交付检查清单", "参考资料"):
+        assert section in manual, f"detailed manual missing section: {section}"
+    for link in (
+        "https://developers.openai.com/codex/permissions",
+        "https://developers.openai.com/codex/build-skills",
+        "https://developers.openai.com/codex/learn/best-practices",
+        "https://developers.openai.com/codex/automations",
+        "https://github.com/freestylefly/CodexGuide",
+    ):
+        assert link in manual, f"detailed manual missing reference: {link}"
     return {"documents": "OK", "manuals_identical": True}
 
 

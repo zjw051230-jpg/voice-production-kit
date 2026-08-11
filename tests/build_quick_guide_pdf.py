@@ -68,6 +68,11 @@ def styles() -> dict[str, ParagraphStyle]:
             leading=22, textColor=BLUE, spaceBefore=5 * mm, spaceAfter=2.5 * mm,
             keepWithNext=True,
         ),
+        "h3": ParagraphStyle(
+            "H3CN", parent=base["Heading3"], fontName="MSYH-Bold", fontSize=11.5,
+            leading=18, textColor=TEXT, spaceBefore=3 * mm, spaceAfter=1.5 * mm,
+            keepWithNext=True,
+        ),
         "body": ParagraphStyle(
             "BodyCN", parent=base["BodyText"], fontName="MSYH", fontSize=9.5,
             leading=16, textColor=TEXT, alignment=TA_LEFT, spaceAfter=2.4 * mm,
@@ -150,6 +155,10 @@ def build_story(markdown: str, available_width: float) -> list:
             story.append(Paragraph(inline_markup(line[3:]), style["h2"]))
             index += 1
             continue
+        if line.startswith("### "):
+            story.append(Paragraph(inline_markup(line[4:]), style["h3"]))
+            index += 1
+            continue
         if line.startswith("```"):
             block = []
             index += 1
@@ -190,7 +199,7 @@ def page_frame(canvas, document) -> None:
     canvas.line(18 * mm, 15 * mm, width - 18 * mm, 15 * mm)
     canvas.setFont("MSYH", 7.5)
     canvas.setFillColor(MUTED)
-    canvas.drawString(18 * mm, 10 * mm, "配音工具 v2.0 使用说明")
+    canvas.drawString(18 * mm, 10 * mm, "配音工具 v2.1 使用说明")
     canvas.drawRightString(width - 18 * mm, 10 * mm, f"第 {document.page} 页")
     if document.page > 1:
         canvas.line(18 * mm, height - 15 * mm, width - 18 * mm, height - 15 * mm)
@@ -210,7 +219,7 @@ def main() -> None:
     document = SimpleDocTemplate(
         str(args.output), pagesize=A4, leftMargin=left, rightMargin=right,
         topMargin=20 * mm, bottomMargin=20 * mm,
-        title="配音工具 v2.0 使用说明", author="Codex",
+        title="配音工具 v2.1 使用说明", author="Codex",
         subject="配音工作流快速操作说明",
     )
     markdown = args.source.read_text(encoding="utf-8-sig")

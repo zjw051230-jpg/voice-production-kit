@@ -1,4 +1,4 @@
-# Codex 安装入口 v2.0
+# Codex 安装入口 v2.1
 
 新电脑让 Codex 完整读取 `START-HERE.md`。手工安装：
 

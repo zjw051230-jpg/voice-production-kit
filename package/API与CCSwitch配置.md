@@ -1,4 +1,4 @@
-# API 与 CC Switch 配置 v2.0
+# API 与 CC Switch 配置 v2.1
 
 ## Seedance API
 
@@ -57,7 +57,7 @@ py -3 scripts\manage_api_pool.py --project-root <项目根目录> resume-after-b
 4. 把下面整段话发给 Codex：
 
 ```text
-我已经在 CC Switch 中完成 Codex provider 和 API 配置，并已完全退出 CC Switch。请读取当前 v2.0 安装包中的“API与CCSwitch配置.md”，使用 scripts\configure_ccswitch_model.py 处理当前 Codex provider。只允许新增或修改显示名严格等于“5.5”的这一条映射，使它实际请求“dpskv4”；绝对禁止修改、重命名、删除或映射任何其他模型，也不得修改 API Key、base_url、provider ID 或其他数据库表。先执行 dry-run，只有预览明确显示“5.5 -> dpskv4”且显示其他模型未改变时，才自动备份数据库并执行修改；随后运行数据库完整性检查，报告 provider 名称和 ID、备份路径、映射结果与检查结果。完成后停止，不做其他操作。
+我已经在 CC Switch 中完成 Codex provider 和 API 配置，并已完全退出 CC Switch。请读取当前 v2.1 安装包中的“API与CCSwitch配置.md”，使用 scripts\configure_ccswitch_model.py 处理当前 Codex provider。只允许新增或修改显示名严格等于“5.5”的这一条映射，使它实际请求“dpskv4”；绝对禁止修改、重命名、删除或映射任何其他模型，也不得修改 API Key、base_url、provider ID 或其他数据库表。先执行 dry-run，只有预览明确显示“5.5 -> dpskv4”且显示其他模型未改变时，才自动备份数据库并执行修改；随后运行数据库完整性检查，报告 provider 名称和 ID、备份路径、映射结果与检查结果。完成后停止，不做其他操作。
 ```
 
 5. Codex 完成并报告后，关闭 Codex。
