@@ -44,6 +44,13 @@ REQUIRED_KEYS = ("剧本名字", "task_ID", "角色名字", "台词", "时长", 
 TASK_FILE_RE = re.compile(r"^(.+)\+([1-9]\d*)个任务$")
 INVALID_FOLDER_NAME = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 STATE_LOCK = threading.Lock()
+REMOTE_SUCCESS_STATUSES = {
+    "completed", "succeeded", "success", "done", "downloaded", "postprocess_failed",
+    "download_blocked",
+}
+REMOTE_FAILURE_STATUSES = {
+    "failed", "error", "cancelled", "canceled", "submit_failed",
+}
 
 
 @dataclass(frozen=True)
@@ -500,6 +507,40 @@ def state_path(root: Path, task_name: str) -> Path:
     return root / "已生成视频" / task_name / ".seedance-state.json"
 
 
+def terminal_summary(jobs: dict[str, dict[str, Any]] | list[dict[str, Any]]) -> dict[str, Any]:
+    values = list(jobs.values()) if isinstance(jobs, dict) else list(jobs)
+    statuses = [str(job.get("status") or "new").strip().lower() for job in values]
+    success = sum(status in REMOTE_SUCCESS_STATUSES for status in statuses)
+    failed = sum(status in REMOTE_FAILURE_STATUSES for status in statuses)
+    downloaded = sum(status == "downloaded" for status in statuses)
+    total = len(values)
+    return {
+        "total": total,
+        "success": success,
+        "failed": failed,
+        "running": total - success - failed,
+        "downloaded": downloaded,
+        "terminal": total > 0 and success + failed == total,
+    }
+
+
+def print_terminal_summary(jobs: dict[str, dict[str, Any]], stage: str) -> dict[str, Any]:
+    summary = terminal_summary(jobs)
+    print(json.dumps({"stage": stage, **summary}, ensure_ascii=False), flush=True)
+    return summary
+
+
+def require_terminal_for_pullback(jobs: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    summary = terminal_summary(jobs)
+    if not summary["terminal"]:
+        raise RuntimeError(
+            "整批远端任务尚未结束，禁止拉回："
+            f"success={summary['success']}, failed={summary['failed']}, "
+            f"running={summary['running']}, total={summary['total']}"
+        )
+    return summary
+
+
 def load_states(root: Path, task_names: set[str]) -> dict[str, dict[str, Any]]:
     combined = {}
     for task_name in task_names:
@@ -518,7 +559,8 @@ def save_states(root: Path, states: dict[str, dict[str, Any]]) -> None:
             path = state_path(root, task_name)
             path.parent.mkdir(parents=True, exist_ok=True)
             temp = path.with_name(f"{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
-            temp.write_text(json.dumps({"jobs": jobs}, ensure_ascii=False, indent=2), encoding="utf-8")
+            document = {"jobs": jobs, "terminal_summary": terminal_summary(jobs)}
+            temp.write_text(json.dumps(document, ensure_ascii=False, indent=2), encoding="utf-8")
             for attempt in range(10):
                 try:
                     os.replace(temp, path)
@@ -605,6 +647,8 @@ def run_generation(root: Path, items: list[Item], refs: dict[str, Reference], wo
                    submit_only: bool = False,
                    direct_mp3: bool = False,
                    poll_once: bool = False,
+                   monitor_only: bool = False,
+                   pullback_only: bool = False,
                    only_variants: set[tuple[str, int]] | None = None,
                    variants_per_line: int = 4,
                    config_file: str | None = None) -> None:
@@ -619,8 +663,9 @@ def run_generation(root: Path, items: list[Item], refs: dict[str, Reference], wo
     for field in ("api_key", "base_url", "model"):
         if not config.get(field):
             raise ValueError(f"配置缺少字段：{field}")
-    ffmpeg_exe()
-    uploaded = {} if resume_only else upload_all_references(root, refs, config, workers)
+    if not monitor_only:
+        ffmpeg_exe()
+    uploaded = {} if resume_only or monitor_only or pullback_only else upload_all_references(root, refs, config, workers)
     api_key = config["api_key"]
     base_url = str(config["base_url"]).rstrip("/")
     if not base_url.endswith("/v1"):
@@ -668,8 +713,10 @@ def run_generation(root: Path, items: list[Item], refs: dict[str, Reference], wo
             jobs[key] = job
     states.update(jobs)
     save_states(root, states)
-    if resume_only:
-        missing_ids = [key for key, job in jobs.items() if not job.get("api_id")]
+    if resume_only or monitor_only or pullback_only:
+        missing_ids = [key for key, job in jobs.items()
+                       if not job.get("api_id")
+                       and str(job.get("status") or "new").lower() not in REMOTE_FAILURE_STATUSES]
         if missing_ids:
             raise ValueError("--resume-only 发现尚未提交的任务，不能跳过素材上传：" +
                              ", ".join(missing_ids[:8]))
@@ -709,19 +756,20 @@ def run_generation(root: Path, items: list[Item], refs: dict[str, Reference], wo
         return key, job
 
     balance_error: BalanceExhaustedError | None = None
-    with cf.ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = {pool.submit(submit, pair): pair[0] for pair in jobs.items()}
-        for future in cf.as_completed(futures):
-            try:
-                key, job = future.result()
-                states[key] = job
-                save_states(root, states)
-            except BalanceExhaustedError as exc:
-                balance_stop.set()
-                balance_error = balance_error or exc
-                key = futures[future]
-                states[key] = jobs[key]
-                save_states(root, states)
+    if not (monitor_only or pullback_only):
+        with cf.ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {pool.submit(submit, pair): pair[0] for pair in jobs.items()}
+            for future in cf.as_completed(futures):
+                try:
+                    key, job = future.result()
+                    states[key] = job
+                    save_states(root, states)
+                except BalanceExhaustedError as exc:
+                    balance_stop.set()
+                    balance_error = balance_error or exc
+                    key = futures[future]
+                    states[key] = jobs[key]
+                    save_states(root, states)
     if balance_error:
         raise balance_error
 
@@ -734,9 +782,11 @@ def run_generation(root: Path, items: list[Item], refs: dict[str, Reference], wo
         ), flush=True)
         return
 
-    while True:
+    while not pullback_only:
         pending = [(key, job) for key, job in jobs.items()
-                   if job.get("api_id") and job.get("status") not in {"completed", "failed", "downloaded"}]
+                   if job.get("api_id")
+                   and str(job.get("status") or "new").lower()
+                   not in REMOTE_SUCCESS_STATUSES | REMOTE_FAILURE_STATUSES]
         if not pending:
             break
         if not poll_once:
@@ -767,11 +817,17 @@ def run_generation(root: Path, items: list[Item], refs: dict[str, Reference], wo
         if poll_once:
             break
 
+    summary = print_terminal_summary(jobs, "monitor" if monitor_only else "pullback-gate")
+    if monitor_only:
+        return
+    require_terminal_for_pullback(jobs)
+
     # A download or MP3 extraction can be interrupted after the remote task
     # has completed. Retry that local step with the saved API ID instead of
     # creating a second billable generation request.
     completed = [(key, job) for key, job in jobs.items()
-                 if job.get("status") in {"completed", "postprocess_failed"}]
+                 if str(job.get("status") or "").lower()
+                 in REMOTE_SUCCESS_STATUSES - {"downloaded"}]
 
     def finish(pair: tuple[str, dict[str, Any]]) -> tuple[str, dict[str, Any]]:
         key, job = pair
@@ -801,6 +857,7 @@ def run_generation(root: Path, items: list[Item], refs: dict[str, Reference], wo
         for key, job in pool.map(finish, completed):
             states[key] = jobs[key] = job
     save_states(root, states)
+    print_terminal_summary(jobs, "pullback-complete")
 
 
 def extract_existing(root: Path, workers: int, task_ids: set[str] | None = None) -> None:
@@ -932,7 +989,11 @@ def main() -> int:
     parser.add_argument("--direct-mp3", action="store_true",
                         help="Extract the complete video audio track to MP3 without semantic trimming.")
     parser.add_argument("--poll-once", action="store_true",
-                        help="Query saved task IDs once, download completed jobs, then exit.")
+                        help="Query saved task IDs once, then exit.")
+    parser.add_argument("--monitor-only", action="store_true",
+                        help="Poll/query remote jobs without downloading any media.")
+    parser.add_argument("--pullback-only", action="store_true",
+                        help="Do not submit or poll; download only after the whole batch is terminal.")
     parser.add_argument("--variant", action="append", default=[],
                         help="Only process one task_ID/variant, e.g. 0720005_1/v02; repeat as needed.")
     parser.add_argument("--variants-per-line", type=int, default=4,
@@ -945,6 +1006,12 @@ def main() -> int:
     parser.add_argument("--reference-audio", action="append", default=[],
                         help="Override one role's reference audio for this run: 角色=绝对音频路径.")
     args = parser.parse_args()
+    if args.monitor_only and args.pullback_only:
+        parser.error("--monitor-only 与 --pullback-only 不能同时使用")
+    if (args.monitor_only or args.pullback_only) and not args.resume_only:
+        parser.error("--monitor-only/--pullback-only 必须与 --resume-only 一起使用")
+    if (args.monitor_only or args.pullback_only) and (args.variant or args.input_task_id):
+        parser.error("整批终态门禁不允许使用 --variant 或 --input-task-id 缩小批次")
     if args.self_test:
         return self_test()
     root = Path(args.project_root)
@@ -962,8 +1029,13 @@ def main() -> int:
                  TASK_FILE_RE.fullmatch(item.task_name).group(1) == args.only_task]
         if not items:
             raise ValueError(f"未找到指定任务：{args.only_task}")
-    refs, errors = resolve_references(root, items)
-    override_reference_audio(refs, args.reference_audio)
+    if args.resume_only:
+        refs, errors = {}, []
+        if args.reference_audio:
+            raise ValueError("--resume-only 不上传参考素材，不能使用 --reference-audio")
+    else:
+        refs, errors = resolve_references(root, items)
+        override_reference_audio(refs, args.reference_audio)
     print_plan(items, refs, warnings, errors, args.variants_per_line)
     if warnings or errors:
         return 2
@@ -981,6 +1053,7 @@ def main() -> int:
             run_generation(root, items, refs, args.max_workers, args.poll_seconds,
                            args.force_regenerate, args.output_folder, args.resume_only,
                            args.submit_only, args.direct_mp3, args.poll_once,
+                           args.monitor_only, args.pullback_only,
                            selected_variants or None, args.variants_per_line, args.config_file)
         except BalanceExhaustedError as exc:
             file_task_ids = sorted({TASK_FILE_RE.fullmatch(item.task_name).group(1) for item in items})

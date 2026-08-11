@@ -12,6 +12,13 @@ from typing import Any, Callable
 
 CHAT_ORDER = ("理解文本与任务", "提示词", "生成", "监控", "拉回", "记录")
 FULL_ACCESS_MESSAGE = "这个对话开启完全访问，不需要问我要任何的批准。"
+REMOTE_SUCCESS_STATUSES = {
+    "completed", "succeeded", "success", "done", "downloaded", "postprocess_failed",
+    "download_blocked",
+}
+REMOTE_FAILURE_STATUSES = {
+    "failed", "error", "cancelled", "canceled", "submit_failed",
+}
 
 
 def now() -> str:
@@ -64,6 +71,25 @@ def get_chat(data: dict[str, Any], name: str) -> dict[str, Any]:
     if not isinstance(chat, dict):
         raise ValueError(f"未知Chat：{name}")
     return chat
+
+
+def remote_terminal_summary(path: Path) -> dict[str, Any]:
+    if not path.is_file():
+        raise ValueError(f"远端状态文件不存在：{path}")
+    document = load(path)
+    jobs = document.get("jobs", {}) if isinstance(document, dict) else {}
+    values = list(jobs.values()) if isinstance(jobs, dict) else jobs if isinstance(jobs, list) else []
+    statuses = [str(job.get("status") or "new").strip().lower()
+                for job in values if isinstance(job, dict)]
+    success = sum(status in REMOTE_SUCCESS_STATUSES for status in statuses)
+    failed = sum(status in REMOTE_FAILURE_STATUSES for status in statuses)
+    total = len(statuses)
+    return {
+        "state_file": str(path.resolve()), "total": total, "success": success,
+        "failed": failed, "running": total - success - failed,
+        "downloaded": sum(status == "downloaded" for status in statuses),
+        "terminal": total > 0 and success + failed == total,
+    }
 
 
 def bootstrap_report(data: dict[str, Any]) -> dict[str, Any]:
@@ -179,6 +205,7 @@ def main() -> int:
     handoff.add_argument("--to-chat", required=True)
     handoff.add_argument("--task-id", default="")
     handoff.add_argument("--summary", required=True)
+    handoff.add_argument("--remote-state-file", type=Path)
 
     complete = sub.add_parser("complete")
     complete.add_argument("--chat", required=True)
@@ -409,8 +436,21 @@ def main() -> int:
                     "waiting_for_feedback": waiting,
                     "required_action": "停止继续处理；使用Codex任务等待工具等待指定thread反馈",
                 }
+            terminal_gate = None
+            if args.to_chat == "拉回":
+                if args.from_chat != "监控":
+                    raise ValueError("拉回任务只能由监控Chat在整批远端任务终态后交接")
+                if args.remote_state_file is None:
+                    raise ValueError("交接给拉回Chat必须提供 --remote-state-file")
+                terminal_gate = remote_terminal_summary(args.remote_state_file.resolve())
+                if not terminal_gate["terminal"]:
+                    return {
+                        "ready": False, "terminal_gate": terminal_gate,
+                        "reason": "整批远端任务尚未结束；必须满足 success + failed == total",
+                        "required_action": "监控Chat继续查询；不得占用或通知拉回Chat",
+                    }
             retry_key = hashlib.sha256(
-                f"{args.from_chat}\0{args.to_chat}\0{args.task_id}\0{args.summary}".encode("utf-8")
+                f"{args.from_chat}\0{args.to_chat}\0{args.task_id}\0{args.summary}\0{args.remote_state_file or ''}".encode("utf-8")
             ).hexdigest()[:12]
             retry_automation_id = f"voice-chat-retry-{target.get('order', 0)}-{retry_key}"
             if target.get("status") == 1 or target.get("active_task"):
@@ -426,6 +466,7 @@ def main() -> int:
                         "to_chat": args.to_chat,
                         "task_ID": args.task_id or None,
                         "summary": args.summary,
+                        "remote_state_file": str(args.remote_state_file.resolve()) if args.remote_state_file else None,
                     },
                 }
                 data.setdefault("pending_retries", {})[retry_automation_id] = {
@@ -454,6 +495,8 @@ def main() -> int:
                 "summary": args.summary,
                 "from_chat": args.from_chat,
                 "assigned_at": now(),
+                "remote_state_file": terminal_gate["state_file"] if terminal_gate else None,
+                "terminal_gate": terminal_gate,
             }
             target["status"] = 1
             target["active_task"] = active_task
@@ -495,6 +538,7 @@ def main() -> int:
                     "lease_id": lease_id,
                 },
                 "active_task": active_task,
+                "terminal_gate": terminal_gate,
                 "must_stop_and_wait": must_wait,
                 "one_way_terminal": one_way_terminal,
                 "report_to_owner": False if one_way_terminal else bool(target.get("feedback_required")),

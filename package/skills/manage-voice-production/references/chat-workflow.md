@@ -75,6 +75,8 @@ py -3 scripts/manage_chat_workflow.py --project-root <项目> ack-feedback `
 
 提示词、生成、监控、拉回都把阶段结果反馈给 `理解文本与任务`，同时按流程向下游派发。
 
+监控阶段只轮询并更新状态，不下载。它必须等到状态文件中 `success + failed == total` 且 `total > 0`，再把该状态文件作为 `--remote-state-file` 交给 `prepare-handoff`。交接脚本先复核终态再占用拉回 Chat；拉回阶段还会用 `--pullback-only` 第二次复核。任何一层发现仍有运行项都停止拉回并交回监控。
+
 `记录` 是不可变的单向终止阶段：
 
 - 只写项目 `04_管理与记录\03_问题与改进` 和逐句改动记录。

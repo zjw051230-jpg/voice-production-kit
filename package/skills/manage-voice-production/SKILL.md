@@ -21,6 +21,8 @@ py -3 scripts/manage_chat_workflow.py --project-root <项目> bootstrap-status
 
 每次成功交接都会生成唯一 `lease_id` 并写入目标Chat的 `active_task`。完成必须携带同一租约运行 `complete`，不得直接修改status。目标忙碌时按 `retry_contract` 创建5分钟单次定时器后停止本次发送，到点只重试原交接。主对话收到 `must_stop_and_wait=true` 后必须立即停止继续处理，使用Codex任务等待工具等待指定thread；收到反馈并运行 `ack-feedback` 前不得派发下一条。
 
+监控 Chat 只用 `--resume-only --monitor-only --poll-once` 查询，绝不下载局部成功结果。只有状态文件满足 `total > 0` 且 `success + failed == total`，才能运行 `prepare-handoff --from-chat 监控 --to-chat 拉回 --remote-state-file <状态文件>`。脚本会在占用拉回 Chat 前重新检查；未终态时拒绝交接。拉回 Chat 再用 `--resume-only --pullback-only` 执行第二道门禁，整批终态后只下载成功版本。
+
 把 `记录` 视为不可变的单向终止阶段。记录Chat只写文件并用当前租约运行 `complete`，禁止调用 `prepare-handoff` 或向任何Chat发送消息。主对话收到 `one_way_terminal=true` 时不等待记录反馈，直接结束本轮；记录完成结果不得包含 `feedback_contract`。
 
 ## 新手创建项目

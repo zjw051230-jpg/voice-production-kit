@@ -15,7 +15,8 @@ PACKAGE = Path(r"D:\配音工具总结\安装包\v2.1")
 TEST_ROOT = Path(r"D:\配音工具总结\test\v2.1")
 API_SCRIPTS = PACKAGE / "skills" / "seedance-voice-video-batch" / "scripts"
 PROJECT_SCRIPTS = PACKAGE / "skills" / "manage-voice-production" / "scripts"
-sys.path[:0] = [str(API_SCRIPTS), str(PROJECT_SCRIPTS)]
+DASHBOARD_SCRIPTS = PACKAGE / "skills" / "voice-production-dashboard" / "scripts"
+sys.path[:0] = [str(API_SCRIPTS), str(PROJECT_SCRIPTS), str(DASHBOARD_SCRIPTS)]
 
 from api_config_gui import ApiConfigApp, load_environment_keys
 from create_voice_project import create_project
@@ -27,6 +28,8 @@ from manage_api_pool import (
     save_manual_keys,
     signal_balance_exhausted,
 )
+from run_pipeline import require_terminal_for_pullback, terminal_summary
+from voice_dashboard import derive_status, resolve_completed
 
 
 def assert_no_secret(path: Path, secrets: list[str]) -> None:
@@ -397,6 +400,35 @@ def test_chat_workflow(root: Path) -> dict:
     )
     assert forbidden_record_report.returncode != 0 and "单向终止阶段" in forbidden_record_report.stderr
 
+    remote_state = project / "已生成视频" / "T006+1个任务" / ".seedance-state.json"
+    remote_state.parent.mkdir(parents=True, exist_ok=True)
+    remote_jobs = {
+        "T006/v01": {"status": "completed"}, "T006/v02": {"status": "completed"},
+        "T006/v03": {"status": "failed"}, "T006/v04": {"status": "processing"},
+    }
+    remote_state.write_text(json.dumps({"jobs": remote_jobs}, ensure_ascii=False), encoding="utf-8")
+    gated = run(
+        "prepare-handoff", "--from-chat", "监控", "--to-chat", "拉回",
+        "--task-id", "T006", "--summary", "整批终态后拉回",
+        "--remote-state-file", str(remote_state), expected=2,
+    )
+    assert gated["terminal_gate"] == {
+        "state_file": str(remote_state.resolve()), "total": 4, "success": 2,
+        "failed": 1, "running": 1, "downloaded": 0, "terminal": False,
+    }
+    assert run("show")["chats"]["拉回"]["active_task"] is None
+    remote_jobs["T006/v04"]["status"] = "failed"
+    remote_state.write_text(json.dumps({"jobs": remote_jobs}, ensure_ascii=False), encoding="utf-8")
+    allowed = run(
+        "prepare-handoff", "--from-chat", "监控", "--to-chat", "拉回",
+        "--task-id", "T006", "--summary", "整批终态后拉回",
+        "--remote-state-file", str(remote_state),
+    )
+    assert allowed["terminal_gate"]["terminal"] is True
+    assert allowed["terminal_gate"]["success"] + allowed["terminal_gate"]["failed"] == 4
+    assert allowed["active_task"]["remote_state_file"] == str(remote_state.resolve())
+    run("complete", "--chat", "拉回", "--lease-id", allowed["active_task"]["lease_id"])
+
     state_path = project / ".codex" / "04_API池状态.json"
     state = read_json(state_path)
     state.update({"workflow_paused": True, "pause_reason": "Seedance API 余额不足"})
@@ -409,8 +441,62 @@ def test_chat_workflow(root: Path) -> dict:
         "chat_workflow": "OK", "bootstrap_gate": "OK", "model_contract": "OK",
         "full_access_probe": "OK", "single_task_lease": "OK",
         "owner_waits_for_feedback": "OK", "record_one_way_terminal": "OK",
-        "busy_retry_minutes": 5, "pause_gate": "OK",
+        "remote_terminal_gate": "OK", "busy_retry_minutes": 5, "pause_gate": "OK",
     }
+
+
+def test_terminal_and_dashboard(root: Path) -> dict:
+    partial = {
+        "v01": {"status": "completed"}, "v02": {"status": "completed"},
+        "v03": {"status": "failed"}, "v04": {"status": "processing"},
+    }
+    summary = terminal_summary(partial)
+    assert summary == {"total": 4, "success": 2, "failed": 1, "running": 1,
+                       "downloaded": 0, "terminal": False}
+    try:
+        require_terminal_for_pullback(partial)
+    except RuntimeError as error:
+        assert "禁止拉回" in str(error)
+    else:
+        raise AssertionError("partial-terminal batch bypassed pullback gate")
+    partial["v04"]["status"] = "failed"
+    assert require_terminal_for_pullback(partial)["terminal"] is True
+    task = {"提示词": "fixture"}
+    partial["v04"]["status"] = "processing"
+    status, dashboard = derive_status(task, list(partial.values()), "已选中")
+    assert status == "生成中" and dashboard["running"] == 1 and not dashboard["terminal"]
+    partial["v04"]["status"] = "failed"
+    status, dashboard = derive_status(task, list(partial.values()), "已选中")
+    assert status == "可拉回" and dashboard["terminal"] and not dashboard["deliverables_ready"]
+    status, dashboard = derive_status(task, [{"status": "failed"}, {"status": "cancelled"}], "已选中")
+    assert status == "已结束（全部失败）" and dashboard["terminal"] and not dashboard["deliverables_ready"]
+
+    workspace = root / "dashboard-terminal"
+    project = workspace / "项目"
+    task_root = project / "文字素材"
+    state_root = project / "已生成视频" / "TDB+1个任务"
+    mp3_root = project / "已转mp3" / "TDB+1个任务"
+    for path in (task_root, state_root, mp3_root):
+        path.mkdir(parents=True, exist_ok=True)
+    (workspace / "项目注册表.json").write_text(json.dumps({
+        "projects": {"项目": {"project_root": str(project), "active": True}}
+    }, ensure_ascii=False), encoding="utf-8")
+    (task_root / "TDB+1个任务.json").write_text(json.dumps([{
+        "剧本名字": "测试剧", "task_ID": "TDB_1", "角色名字": "角色",
+        "台词": "测试。", "时长": "4秒", "提示词": "fixture",
+    }], ensure_ascii=False), encoding="utf-8")
+    video = state_root / "TDB_1_角色_测试_v01.mp4"
+    mp3 = mp3_root / "TDB_1_角色_测试_v01.mp3"
+    video.write_bytes(b"video"); mp3.write_bytes(b"audio")
+    jobs = {
+        "TDB/v01": {"input_task_id": "TDB_1", "status": "downloaded", "output": str(video), "mp3": str(mp3)},
+        "TDB/v02": {"input_task_id": "TDB_1", "status": "failed"},
+    }
+    state_root.joinpath(".seedance-state.json").write_text(json.dumps({"jobs": jobs}, ensure_ascii=False), encoding="utf-8")
+    row, files = resolve_completed(workspace, "项目::TDB_1")
+    assert row["status"] == "已结束（含失败）" and row["complete"] is True
+    assert set(files) == {video.resolve(), mp3.resolve()}
+    return {"pullback_terminal_gate": "OK", "dashboard_terminal_counts": "OK"}
 
 
 def test_prompt_manifest_and_provenance(root: Path) -> dict:
@@ -528,6 +614,7 @@ def main() -> None:
         result.update(test_ccswitch_mapping(root))
         result.update(test_ccswitch_api_import(root))
         result.update(test_chat_workflow(root))
+        result.update(test_terminal_and_dashboard(root))
         result.update(test_prompt_manifest_and_provenance(root))
         result.update(test_documents())
         print(json.dumps(result, ensure_ascii=False, indent=2))

@@ -206,13 +206,13 @@ def create_chat_workflow(metadata: Path, root: Path) -> None:
             "model": "gpt-5.6-terra", "reasoning_effort": "low",
             "skills": ["seedance-voice-video-batch"],
             "next": "拉回", "feedback": True,
-            "prompt": common + "你只查询已保存的远端任务ID和状态，不重新提交、不重新上传、不使用force-regenerate。完成时反馈理解文本与任务Chat，并把已完成任务交给拉回Chat。",
+            "prompt": common + "你只查询已保存的远端任务ID和状态，不重新提交、不重新上传、不使用force-regenerate，也绝不下载局部成功结果。每次使用run_pipeline.py --resume-only --monitor-only --poll-once查询一次，并读取返回的success、failed、running、total。只有success + failed == total且total>0时整批才算远端终态；未终态就继续按监控间隔等待。达到终态后，必须使用prepare-handoff从监控交给拉回并传入--remote-state-file；门禁通过后再反馈理解文本与任务Chat。",
         },
         "拉回": {
             "model": "gpt-5.6-terra", "reasoning_effort": "low",
             "skills": ["seedance-voice-video-batch", "manage-voice-production"],
             "next": "记录", "feedback": True,
-            "prompt": common + "你只拉取已完成视频并按任务要求提取MP3，不重新提交。核对文件存在并同步逐句资料索引后反馈理解文本与任务Chat，再把结果交给记录Chat。",
+            "prompt": common + "你只在整批远端任务终态后拉取成功版本并按任务要求提取MP3，不重新提交。先使用run_pipeline.py --resume-only --pullback-only --direct-mp3重新检查终态门禁；若success + failed != total立即拒绝并反馈监控Chat继续查询。失败版本不下载，成功版本全部拉回后核对文件存在并同步逐句资料索引，再反馈理解文本与任务Chat并把结果交给记录Chat。",
         },
         "记录": {
             "model": "gpt-5.6-terra", "reasoning_effort": "low",
