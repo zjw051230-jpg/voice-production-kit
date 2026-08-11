@@ -75,12 +75,36 @@ def bootstrap_report(data: dict[str, Any]) -> dict[str, Any]:
         name for name in CHAT_ORDER
         if isinstance(chats.get(name), dict) and not chats[name].get("full_access_verified")
     ]
+    unverified_models = [
+        name for name in CHAT_ORDER
+        if isinstance(chats.get(name), dict) and not chats[name].get("model_verified")
+    ]
+    model_mismatches = [
+        {
+            "chat": name,
+            "required_model": chats[name].get("model"),
+            "actual_model": chats[name].get("actual_model"),
+            "required_reasoning_effort": chats[name].get("reasoning_effort"),
+            "actual_reasoning_effort": chats[name].get("actual_reasoning_effort"),
+        }
+        for name in CHAT_ORDER
+        if isinstance(chats.get(name), dict)
+        and (
+            chats[name].get("actual_model") not in (None, chats[name].get("model"))
+            or chats[name].get("actual_reasoning_effort") not in (
+                None, chats[name].get("reasoning_effort")
+            )
+        )
+    ]
     thread_ids = [
         chats[name].get("thread_id") for name in CHAT_ORDER
         if isinstance(chats.get(name), dict) and chats[name].get("thread_id")
     ]
     duplicate_threads = sorted({item for item in thread_ids if thread_ids.count(item) > 1})
-    ready = not (missing_chats or missing_threads or unverified_access or duplicate_threads)
+    ready = not (
+        missing_chats or missing_threads or unverified_access or unverified_models
+        or model_mismatches or duplicate_threads
+    )
     return {
         "ready": ready,
         "bootstrap_required": not ready,
@@ -89,10 +113,13 @@ def bootstrap_report(data: dict[str, Any]) -> dict[str, Any]:
         "missing_chats": missing_chats,
         "missing_threads": missing_threads,
         "unverified_full_access": unverified_access,
+        "unverified_models": unverified_models,
+        "model_mismatches": model_mismatches,
         "duplicate_thread_ids": duplicate_threads,
         "next_action": (
             "使用Codex任务工具把当前任务命名为‘理解文本与任务’，创建另外五个独立任务，"
-            "按映射表设置模型、推理强度、提示词和完全访问权限，再逐个register"
+            "创建每个任务时显式指定映射表中的模型和推理强度，禁止使用默认值；"
+            "再把实际模型、实际推理强度、thread ID和权限验证结果逐个register"
             if not ready else "入口Chat必须通过prepare-handoff派发工作，不得单Chat代做下游阶段"
         ),
     }
@@ -107,6 +134,8 @@ def main() -> int:
     register.add_argument("--chat", required=True)
     register.add_argument("--thread-id", required=True)
     register.add_argument("--host-id", default="local")
+    register.add_argument("--actual-model", required=True)
+    register.add_argument("--actual-reasoning-effort", required=True)
     register.add_argument("--full-access-verified", choices=("true", "false"), default="false")
 
     status = sub.add_parser("set-status")
@@ -146,11 +175,25 @@ def main() -> int:
     if args.command == "register":
         def action(data: dict[str, Any]) -> dict[str, Any]:
             chat = get_chat(data, args.chat)
+            required_model = chat.get("model")
+            required_effort = chat.get("reasoning_effort")
+            if args.actual_model != required_model:
+                raise ValueError(
+                    f"模型不匹配：{args.chat} 要求 {required_model}，实际 {args.actual_model}"
+                )
+            if args.actual_reasoning_effort != required_effort:
+                raise ValueError(
+                    f"思考程度不匹配：{args.chat} 要求 {required_effort}，"
+                    f"实际 {args.actual_reasoning_effort}"
+                )
             for name, existing in data.get("chats", {}).items():
                 if name != args.chat and existing.get("thread_id") == args.thread_id:
                     raise ValueError(f"thread_id已登记给其他Chat：{name}")
             chat["thread_id"] = args.thread_id
             chat["host_id"] = args.host_id
+            chat["actual_model"] = args.actual_model
+            chat["actual_reasoning_effort"] = args.actual_reasoning_effort
+            chat["model_verified"] = True
             chat["full_access_verified"] = args.full_access_verified == "true"
             report = bootstrap_report(data)
             data["workflow_ready"] = report["ready"]
@@ -199,6 +242,15 @@ def main() -> int:
                     "host_id": target.get("host_id", "local"),
                     "model": target["model"],
                     "reasoning_effort": target["reasoning_effort"],
+                    "prompt_file": target["prompt_file"],
+                    "dispatch_contract": {
+                        "thread_id": target["thread_id"],
+                        "host_id": target.get("host_id", "local"),
+                        "model": target["model"],
+                        "reasoning_effort": target["reasoning_effort"],
+                        "prompt_file": target["prompt_file"],
+                        "defaults_forbidden": True,
+                    },
                     "message_requirement": "余额不足紧急消息；完成恢复前不得派发其他Chat",
                 }
             bootstrap = bootstrap_report(data)
@@ -218,6 +270,8 @@ def main() -> int:
                 raise ValueError(f"目标Chat尚未登记thread_id：{args.to_chat}")
             if target.get("full_access_required") and not target.get("full_access_verified"):
                 raise ValueError(f"目标Chat尚未验证完全访问权限：{args.to_chat}")
+            if not target.get("model_verified"):
+                raise ValueError(f"目标Chat尚未验证实际模型和思考程度：{args.to_chat}")
             target["status"] = 1
             event = {
                 "time": now(), "from": args.from_chat, "to": args.to_chat,
@@ -230,6 +284,15 @@ def main() -> int:
                 "host_id": target.get("host_id", "local"),
                 "model": target["model"],
                 "reasoning_effort": target["reasoning_effort"],
+                "prompt_file": target["prompt_file"],
+                "dispatch_contract": {
+                    "thread_id": target["thread_id"],
+                    "host_id": target.get("host_id", "local"),
+                    "model": target["model"],
+                    "reasoning_effort": target["reasoning_effort"],
+                    "prompt_file": target["prompt_file"],
+                    "defaults_forbidden": True,
+                },
                 "message_requirement": "消息中提醒：完成后运行complete把自己的status改回0",
             }
         result = mutate(path, action)

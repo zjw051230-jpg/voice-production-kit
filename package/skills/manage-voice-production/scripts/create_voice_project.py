@@ -174,6 +174,8 @@ def create_chat_workflow(metadata: Path, root: Path) -> None:
         "接到任务时自己的 status 应已由上游设为1。完成后必须运行 manage_chat_workflow.py complete 把自己改回0。"
         "向下游发送前先运行 prepare-handoff；若目标 status=1，不得发送，创建5分钟心跳后重新检查并循环。"
         "交接消息必须包含来源Chat、task_ID、文件绝对路径、具体动作、不可违反的约束，并提醒下游完成后把自己的status改为0。"
+        "创建或登记任何Chat时必须显式指定映射表中的model和reasoning_effort，禁止沿用界面默认值；"
+        "必须把实际值传给register并通过校验，prepare-handoff返回的dispatch_contract是唯一派发依据。"
         "每次开始和交接前读取 .codex\\04_API池状态.json；workflow_paused=true 时立即停止常规流程。"
         "任何Chat发现明确余额不足时，必须运行 seedance-voice-video-batch/scripts/manage_api_pool.py 的 balance-exhausted，"
         "打断全部流程并把紧急消息发送给‘理解文本与任务’Chat，不得继续提交、查询或拉回。"
@@ -183,7 +185,7 @@ def create_chat_workflow(metadata: Path, root: Path) -> None:
             "model": "gpt-5.6-sol", "reasoning_effort": "medium",
             "skills": ["manage-voice-production", "generate-voice-prompt-json", "seedance-voice-video-batch"],
             "next": "提示词", "feedback": True,
-            "prompt": common + "你是总入口和流程负责人。首次进入项目必须先运行bootstrap-status；未就绪时立即把当前任务命名为‘理解文本与任务’，使用Codex任务工具创建提示词、生成、监控、拉回、记录五个独立任务，逐个设置映射表指定的模型、推理强度、提示词和完全访问权限并register。六个任务全部就绪前禁止开始生产。你只负责理解用户文本、补问缺失资料、拆解任务、维护项目元数据和派发；禁止自己代做提示词编写、Seedance提交、监控、拉回或记录。所有派发必须先运行prepare-handoff并使用返回的thread ID。所有需要反馈的阶段都回到你这里，由你向用户做最终确认。收到余额不足紧急消息时，先确认程序已切换下一份API；没有则让用户在CC Switch配置新API并重新导入。然后运行resume-after-balance，使用原任务参数且不加force只重提没有远端ID的版本。",
+            "prompt": common + "你是总入口和流程负责人。首次进入项目必须先运行bootstrap-status；未就绪时立即把当前任务命名为‘理解文本与任务’，使用Codex任务工具创建提示词、生成、监控、拉回、记录五个独立任务。创建每个任务时必须显式传入映射表指定的model和reasoning_effort，绝不能使用默认模型或默认思考程度；随后把实际model、实际reasoning_effort、提示词和权限验证结果传给register。六个任务全部就绪前禁止开始生产。你只负责理解用户文本、补问缺失资料、拆解任务、维护项目元数据和派发；禁止自己代做提示词编写、Seedance提交、监控、拉回或记录。所有派发必须先运行prepare-handoff，严格使用返回的dispatch_contract，不得自行替换模型或思考程度。所有需要反馈的阶段都回到你这里，由你向用户做最终确认。收到余额不足紧急消息时，先确认程序已切换下一份API；没有则让用户在CC Switch配置新API并重新导入。然后运行resume-after-balance，使用原任务参数且不加force只重提没有远端ID的版本。",
         },
         "提示词": {
             "model": "gpt-5.6-sol", "reasoning_effort": "medium",
@@ -227,6 +229,9 @@ def create_chat_workflow(metadata: Path, root: Path) -> None:
             "status": 0,
             "model": definition["model"],
             "reasoning_effort": definition["reasoning_effort"],
+            "actual_model": None,
+            "actual_reasoning_effort": None,
+            "model_verified": False,
             "full_access_required": True,
             "full_access_verified": False,
             "prompt": definition["prompt"],
@@ -238,7 +243,7 @@ def create_chat_workflow(metadata: Path, root: Path) -> None:
         }
     if not table_path.exists():
         write_json(table_path, {
-            "schema_version": 2,
+            "schema_version": 3,
             "project_root": str(root.resolve()),
             "workflow_owner": "理解文本与任务",
             "entry_chat": "理解文本与任务",

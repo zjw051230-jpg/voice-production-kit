@@ -201,12 +201,46 @@ def test_chat_workflow(root: Path) -> dict:
         assert completed.returncode == expected, completed.stdout + completed.stderr
         return json.loads(completed.stdout)
 
+    models = {
+        "理解文本与任务": ("gpt-5.6-sol", "medium"),
+        "提示词": ("gpt-5.6-sol", "medium"),
+        "生成": ("gpt-5.6-terra", "medium"),
+        "监控": ("gpt-5.6-terra", "low"),
+        "拉回": ("gpt-5.6-terra", "low"),
+        "记录": ("gpt-5.6-terra", "low"),
+    }
+
+    def register(chat: str, thread: str) -> dict:
+        model, effort = models[chat]
+        return run(
+            "register", "--chat", chat, "--thread-id", thread,
+            "--actual-model", model, "--actual-reasoning-effort", effort,
+            "--full-access-verified", "true",
+        )
+
     initial = run("bootstrap-status", expected=4)
     assert initial["bootstrap_required"] is True
     assert set(initial["missing_threads"]) == {"理解文本与任务", "提示词", "生成", "监控", "拉回", "记录"}
 
-    run("register", "--chat", "理解文本与任务", "--thread-id", "thread-owner", "--full-access-verified", "true")
-    run("register", "--chat", "提示词", "--thread-id", "thread-prompt", "--full-access-verified", "true")
+    wrong_model = subprocess.run(
+        [sys.executable, str(script), "--project-root", str(project), "register",
+         "--chat", "理解文本与任务", "--thread-id", "thread-owner",
+         "--actual-model", "gpt-5.6-terra", "--actual-reasoning-effort", "medium",
+         "--full-access-verified", "true"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", env=env,
+    )
+    assert wrong_model.returncode != 0 and "模型不匹配" in wrong_model.stderr
+    wrong_effort = subprocess.run(
+        [sys.executable, str(script), "--project-root", str(project), "register",
+         "--chat", "理解文本与任务", "--thread-id", "thread-owner",
+         "--actual-model", "gpt-5.6-sol", "--actual-reasoning-effort", "low",
+         "--full-access-verified", "true"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", env=env,
+    )
+    assert wrong_effort.returncode != 0 and "思考程度不匹配" in wrong_effort.stderr
+
+    register("理解文本与任务", "thread-owner")
+    register("提示词", "thread-prompt")
     blocked_bootstrap = run(
         "prepare-handoff", "--from-chat", "理解文本与任务", "--to-chat", "提示词",
         "--summary", "初始化未完成", expected=2,
@@ -216,7 +250,9 @@ def test_chat_workflow(root: Path) -> dict:
 
     duplicate = subprocess.run(
         [sys.executable, str(script), "--project-root", str(project), "register",
-         "--chat", "生成", "--thread-id", "thread-prompt", "--full-access-verified", "true"],
+         "--chat", "生成", "--thread-id", "thread-prompt",
+         "--actual-model", "gpt-5.6-terra", "--actual-reasoning-effort", "medium",
+         "--full-access-verified", "true"],
         capture_output=True, text=True, encoding="utf-8", errors="replace", env=env,
     )
     assert duplicate.returncode != 0 and "thread_id已登记给其他Chat" in duplicate.stderr
@@ -225,12 +261,17 @@ def test_chat_workflow(root: Path) -> dict:
         ("生成", "thread-generate"), ("监控", "thread-monitor"),
         ("拉回", "thread-download"), ("记录", "thread-record"),
     ):
-        run("register", "--chat", chat, "--thread-id", thread, "--full-access-verified", "true")
+        register(chat, thread)
     bootstrapped = run("bootstrap-status")
     assert bootstrapped["ready"] is True and bootstrapped["duplicate_thread_ids"] == []
 
     ready = run("prepare-handoff", "--from-chat", "理解文本与任务", "--to-chat", "提示词", "--task-id", "T001", "--summary", "测试交接")
     assert ready["ready"] is True and ready["thread_id"] == "thread-prompt"
+    assert ready["dispatch_contract"] == {
+        "thread_id": "thread-prompt", "host_id": "local",
+        "model": "gpt-5.6-sol", "reasoning_effort": "medium",
+        "prompt_file": ready["prompt_file"], "defaults_forbidden": True,
+    }
     busy = run("prepare-handoff", "--from-chat", "理解文本与任务", "--to-chat", "提示词", "--summary", "重复交接", expected=2)
     assert busy["ready"] is False and busy["retry_minutes"] == 5
     assert run("complete", "--chat", "提示词")["status"] == 0
@@ -243,7 +284,7 @@ def test_chat_workflow(root: Path) -> dict:
     assert blocked["paused"] is True and blocked["required_target"] == "理解文本与任务"
     emergency = run("prepare-handoff", "--from-chat", "生成", "--to-chat", "理解文本与任务", "--summary", "余额不足")
     assert emergency["emergency"] is True and emergency["thread_id"] == "thread-owner"
-    return {"chat_workflow": "OK", "bootstrap_gate": "OK", "busy_retry_minutes": 5, "pause_gate": "OK"}
+    return {"chat_workflow": "OK", "bootstrap_gate": "OK", "model_contract": "OK", "busy_retry_minutes": 5, "pause_gate": "OK"}
 
 
 def test_prompt_manifest_and_provenance(root: Path) -> dict:

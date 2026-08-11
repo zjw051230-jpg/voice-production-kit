@@ -20,18 +20,30 @@ py -3 scripts/manage_chat_workflow.py --project-root <项目> bootstrap-status
 
 1. 把当前Codex任务命名为 `理解文本与任务`，登记它的实际thread ID。
 2. 使用Codex任务创建工具创建另外五个独立任务，禁止用子代理代替固定Chat。
-3. 使用映射表中的模型、推理强度和提示词初始化每个任务。
+3. 创建每个任务时显式传入映射表中的 `model` 和 `reasoning_effort`，禁止采用界面或工具默认值。
 4. 在每个任务中启用并实际验证完全访问权限。
-5. 使用 `register` 逐一写入互不重复的thread ID和权限验证结果。
+5. 使用 `register` 逐一写入互不重复的thread ID、实际模型、实际思考程度和权限验证结果。实际值与要求不一致时必须重建或修正该任务，不能继续。
 6. 再次运行 `bootstrap-status`；未就绪就继续初始化，不得编写提示词或调用Seedance。
 
 入口Chat只做理解、补问、拆解、派发和汇总。提示词、生成、监控、拉回、记录必须由对应独立Chat完成，所有业务派发都必须经过 `prepare-handoff`。
+
+登记示例：
+
+```powershell
+py -3 scripts/manage_chat_workflow.py --project-root <项目> register `
+  --chat 提示词 --thread-id <实际thread_ID> `
+  --actual-model gpt-5.6-sol --actual-reasoning-effort medium `
+  --full-access-verified true
+```
+
+`bootstrap-status` 会同时检查 `model_verified`。只登记thread ID但没有实际模型/思考程度，或实际值与映射不一致，均不得开始生产。
 
 ## 状态协议
 
 - `0`：空闲，可以接收。
 - `1`：处理中或已被上游占用。
-- 上游发送前必须运行 `prepare-handoff`。脚本在目标为0时原子改成1并返回thread ID、模型和推理强度。
+- 上游发送前必须运行 `prepare-handoff`。脚本在目标为0时原子改成1并返回 `dispatch_contract`，其中包含thread ID、host ID、精确模型、精确思考程度和提示词文件。
+- 创建任务和发送任务都必须严格采用 `dispatch_contract`，不得省略模型或思考程度，不得使用默认值。
 - 目标已经为1时，不发送消息；创建5分钟心跳，时间到后重新运行 `prepare-handoff`，持续循环。
 - 每条交接消息都必须提醒接收者：完成后运行 `complete` 把自己的status改为0。
 - 接收者不得在开始时自行把status改为1，因为该动作由上游完成。
@@ -62,8 +74,8 @@ py -3 scripts/manage_chat_workflow.py --project-root <项目> complete --chat �
 第一次启用时：
 
 1. 当前Chat改名为 `理解文本与任务`，登记当前thread ID。
-2. 按映射表指定模型和推理强度依次创建另外五个Chat。
-3. 把实际thread ID写回映射表。
+2. 按映射表显式指定模型和推理强度，依次创建另外五个Chat；创建调用中必须出现这两个参数。
+3. 把实际thread ID、实际模型和实际思考程度通过 `register` 写回映射表并通过匹配校验。
 4. 逐个打开Chat，在界面底部把权限切换为“完全访问权限”，验证后登记。
 5. 初始提示词必须包含项目绝对路径、状态协议、反馈规则、模型、技能和角色边界。
 6. 最后运行 `bootstrap-status`，只有 `ready=true` 才能开始第一条任务。

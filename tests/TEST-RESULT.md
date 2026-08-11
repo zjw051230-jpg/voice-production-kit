@@ -62,3 +62,11 @@
 - `prepare-handoff` 在六个独立 Chat 全部就绪前拒绝业务交接。
 - 六个 Chat 全部登记且权限验证后，交接、忙碌重试和余额暂停流程继续正常工作。
 - `manage-voice-production` 通过 Skill 校验；完整离线工作流测试通过且未调用网络。
+
+## v2.1 问题2：模型与思考程度派发合同
+
+- 主 Chat 创建六个固定 Chat 时必须显式指定映射表中的模型和思考程度，禁止采用默认值。
+- `register` 强制登记实际模型与实际思考程度；错误模型和错误思考程度测试均被拒绝。
+- `bootstrap-status` 将模型验证纳入硬门禁；只登记 thread ID 和权限仍不能开始生产。
+- `prepare-handoff` 返回含 thread ID、host ID、模型、思考程度和提示词文件的 `dispatch_contract`。
+- 六个 Chat 按各自精确配置登记后完整离线回归通过，`model_contract=OK`，未调用网络。
