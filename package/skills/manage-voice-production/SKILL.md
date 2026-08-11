@@ -15,7 +15,7 @@ description: Create, register, inspect, and maintain portable multi-project Chin
 py -3 scripts/manage_chat_workflow.py --project-root <项目> bootstrap-status
 ```
 
-返回码为4或 `ready=false` 时，立即停止业务处理。把当前任务命名为 `理解文本与任务`，使用 Codex 任务工具创建 `提示词`、`生成`、`监控`、`拉回`、`记录` 五个独立任务；创建每个任务时必须显式传入映射表指定的模型和推理强度，禁止使用默认值。用 `register` 登记实际 thread ID、实际模型、实际思考程度和权限验证结果。六个任务全部登记、thread ID 互不重复、模型与思考程度完全匹配且完全访问均已验证后，`bootstrap-status` 才能返回0。
+返回码为4或 `ready=false` 时，立即停止业务处理。把当前任务命名为 `理解文本与任务`，按返回的 `chat_creation_contracts` 使用 Codex 任务工具创建 `提示词`、`生成`、`监控`、`拉回`、`记录` 五个独立任务；创建每个任务时必须显式传入指定模型和推理强度，并把“这个对话开启完全访问，不需要问我要任何的批准。”作为第一条消息。每个Chat必须亲自运行 `verify-access`，再用 `register` 登记实际 thread ID、实际模型和实际思考程度。六个任务全部登记、thread ID 互不重复、模型与思考程度完全匹配且权限探测均通过后，`bootstrap-status` 才能返回0。
 
 入口只负责理解、补问、拆解、维护索引、派发和汇总，禁止代做提示词、生成、监控、拉回或记录。所有业务阶段必须先执行 `prepare-handoff`，再严格按返回的 `dispatch_contract` 中的 thread ID、模型、思考程度和提示词文件创建或发送任务；不得自行采用默认值。未通过门禁时脚本会拒绝交接。
 

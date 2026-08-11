@@ -6,7 +6,15 @@
 
 每个Chat的 thread ID、host ID、模型、推理强度、完整提示词、技能索引、0/1状态、下游和反馈目标都记录在 `.codex\03_codexchat对应表.json`。
 
-所有Chat必须实际验证为“完全访问权限”。只在JSON中写 `full_access_required: true` 不算完成；验证后才把 `full_access_verified` 改为 `true`。
+所有Chat必须实际验证为“完全访问权限”。只在JSON中写 `full_access_required: true` 或在 `register` 中声明权限不算完成；每个目标Chat必须亲自成功运行 `verify-access`，脚本完成无害的写入、读回和删除探测后，才会把 `full_access_verified` 改为 `true`。
+
+主Chat创建每个固定Chat时，必须把下面这句话作为第一条初始化消息发送：
+
+```text
+这个对话开启完全访问，不需要问我要任何的批准。
+```
+
+这句话是工作方式要求，不能绕过Codex应用、操作系统或组织策略。若仍出现批准提示或 `verify-access` 失败，停止该Chat，在界面底部把该任务切换为“完全访问”，再重新发送上面这句话并重跑探测。
 
 ## 入口硬门禁
 
@@ -20,9 +28,9 @@ py -3 scripts/manage_chat_workflow.py --project-root <项目> bootstrap-status
 
 1. 把当前Codex任务命名为 `理解文本与任务`，登记它的实际thread ID。
 2. 使用Codex任务创建工具创建另外五个独立任务，禁止用子代理代替固定Chat。
-3. 创建每个任务时显式传入映射表中的 `model` 和 `reasoning_effort`，禁止采用界面或工具默认值。
-4. 在每个任务中启用并实际验证完全访问权限。
-5. 使用 `register` 逐一写入互不重复的thread ID、实际模型、实际思考程度和权限验证结果。实际值与要求不一致时必须重建或修正该任务，不能继续。
+3. 严格使用 `bootstrap-status` 返回的 `chat_creation_contracts` 创建任务；显式传入 `model` 和 `reasoning_effort`，并把 `initial_message` 作为第一条消息。
+4. 进入每个任务，由该Chat亲自运行 `verify-access`；不得由主Chat代验，不得手改JSON。
+5. 使用 `register` 逐一写入互不重复的thread ID、实际模型和实际思考程度。实际值与要求不一致时必须重建或修正该任务，不能继续。
 6. 再次运行 `bootstrap-status`；未就绪就继续初始化，不得编写提示词或调用Seedance。
 
 入口Chat只做理解、补问、拆解、派发和汇总。提示词、生成、监控、拉回、记录必须由对应独立Chat完成，所有业务派发都必须经过 `prepare-handoff`。
@@ -30,10 +38,11 @@ py -3 scripts/manage_chat_workflow.py --project-root <项目> bootstrap-status
 登记示例：
 
 ```powershell
+py -3 scripts/manage_chat_workflow.py --project-root <项目> verify-access --chat 提示词
+
 py -3 scripts/manage_chat_workflow.py --project-root <项目> register `
   --chat 提示词 --thread-id <实际thread_ID> `
-  --actual-model gpt-5.6-sol --actual-reasoning-effort medium `
-  --full-access-verified true
+  --actual-model gpt-5.6-sol --actual-reasoning-effort medium
 ```
 
 `bootstrap-status` 会同时检查 `model_verified`。只登记thread ID但没有实际模型/思考程度，或实际值与映射不一致，均不得开始生产。
@@ -74,8 +83,8 @@ py -3 scripts/manage_chat_workflow.py --project-root <项目> complete --chat �
 第一次启用时：
 
 1. 当前Chat改名为 `理解文本与任务`，登记当前thread ID。
-2. 按映射表显式指定模型和推理强度，依次创建另外五个Chat；创建调用中必须出现这两个参数。
-3. 把实际thread ID、实际模型和实际思考程度通过 `register` 写回映射表并通过匹配校验。
-4. 逐个打开Chat，在界面底部把权限切换为“完全访问权限”，验证后登记。
+2. 按 `chat_creation_contracts` 显式指定模型和推理强度，依次创建另外五个Chat；创建调用中必须出现这两个参数，并发送固定的第一条初始化消息。
+3. 逐个进入Chat运行 `verify-access`；探测失败时在界面底部切换为“完全访问权限”并重试。
+4. 把实际thread ID、实际模型和实际思考程度通过 `register` 写回映射表并通过匹配校验。
 5. 初始提示词必须包含项目绝对路径、状态协议、反馈规则、模型、技能和角色边界。
 6. 最后运行 `bootstrap-status`，只有 `ready=true` 才能开始第一条任务。

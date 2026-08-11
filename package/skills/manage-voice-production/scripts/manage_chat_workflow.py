@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 CHAT_ORDER = ("理解文本与任务", "提示词", "生成", "监控", "拉回", "记录")
+FULL_ACCESS_MESSAGE = "这个对话开启完全访问，不需要问我要任何的批准。"
 
 
 def now() -> str:
@@ -66,6 +67,7 @@ def get_chat(data: dict[str, Any], name: str) -> dict[str, Any]:
 
 def bootstrap_report(data: dict[str, Any]) -> dict[str, Any]:
     chats = data.get("chats", {})
+    project_root = data.get("project_root") or "<项目>"
     missing_chats = [name for name in CHAT_ORDER if not isinstance(chats.get(name), dict)]
     missing_threads = [
         name for name in CHAT_ORDER
@@ -101,6 +103,21 @@ def bootstrap_report(data: dict[str, Any]) -> dict[str, Any]:
         if isinstance(chats.get(name), dict) and chats[name].get("thread_id")
     ]
     duplicate_threads = sorted({item for item in thread_ids if thread_ids.count(item) > 1})
+    creation_contracts = {
+        name: {
+            "model": chats[name].get("model"),
+            "reasoning_effort": chats[name].get("reasoning_effort"),
+            "prompt_file": chats[name].get("prompt_file"),
+            "initial_message": chats[name].get("initial_message") or FULL_ACCESS_MESSAGE,
+            "access_verification": {
+                "command": "verify-access",
+                "project_root": project_root,
+                "chat": name,
+                "must_run_in_target_chat": True,
+            },
+        }
+        for name in CHAT_ORDER if isinstance(chats.get(name), dict)
+    }
     ready = not (
         missing_chats or missing_threads or unverified_access or unverified_models
         or model_mismatches or duplicate_threads
@@ -116,10 +133,11 @@ def bootstrap_report(data: dict[str, Any]) -> dict[str, Any]:
         "unverified_models": unverified_models,
         "model_mismatches": model_mismatches,
         "duplicate_thread_ids": duplicate_threads,
+        "chat_creation_contracts": creation_contracts,
         "next_action": (
             "使用Codex任务工具把当前任务命名为‘理解文本与任务’，创建另外五个独立任务，"
-            "创建每个任务时显式指定映射表中的模型和推理强度，禁止使用默认值；"
-            "再把实际模型、实际推理强度、thread ID和权限验证结果逐个register"
+            "按chat_creation_contracts创建每个任务，并把initial_message作为第一条消息；"
+            "每个目标Chat必须自己运行verify-access，再登记实际模型、实际推理强度和thread ID"
             if not ready else "入口Chat必须通过prepare-handoff派发工作，不得单Chat代做下游阶段"
         ),
     }
@@ -136,7 +154,9 @@ def main() -> int:
     register.add_argument("--host-id", default="local")
     register.add_argument("--actual-model", required=True)
     register.add_argument("--actual-reasoning-effort", required=True)
-    register.add_argument("--full-access-verified", choices=("true", "false"), default="false")
+
+    verify_access = sub.add_parser("verify-access")
+    verify_access.add_argument("--chat", required=True)
 
     status = sub.add_parser("set-status")
     status.add_argument("--chat", required=True)
@@ -172,6 +192,36 @@ def main() -> int:
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0 if report["ready"] else 4
 
+    if args.command == "verify-access":
+        def action(data: dict[str, Any]) -> dict[str, Any]:
+            chat = get_chat(data, args.chat)
+            probe = path.parent / f".full-access-probe-{chat.get('order', 0)}.tmp"
+            payload = os.urandom(24).hex()
+            try:
+                probe.write_text(payload, encoding="utf-8")
+                if probe.read_text(encoding="utf-8") != payload:
+                    raise RuntimeError("权限探测读回内容不一致")
+            except OSError as error:
+                raise RuntimeError(
+                    "完全访问探测失败；请在Codex界面把当前任务切换为完全访问后重试："
+                    f"{error}"
+                ) from error
+            finally:
+                probe.unlink(missing_ok=True)
+            chat["full_access_verified"] = True
+            chat["access_probe"] = {
+                "verified_at": now(),
+                "probe_directory": str(path.parent.resolve()),
+                "write_read_delete_verified": True,
+                "verified_in_target_chat": True,
+            }
+            report = bootstrap_report(data)
+            data["workflow_ready"] = report["ready"]
+            data["bootstrap_required"] = not report["ready"]
+            return {"chat": args.chat, "full_access_verified": True, "bootstrap": report}
+        print(json.dumps(mutate(path, action), ensure_ascii=False))
+        return 0
+
     if args.command == "register":
         def action(data: dict[str, Any]) -> dict[str, Any]:
             chat = get_chat(data, args.chat)
@@ -194,7 +244,6 @@ def main() -> int:
             chat["actual_model"] = args.actual_model
             chat["actual_reasoning_effort"] = args.actual_reasoning_effort
             chat["model_verified"] = True
-            chat["full_access_verified"] = args.full_access_verified == "true"
             report = bootstrap_report(data)
             data["workflow_ready"] = report["ready"]
             data["bootstrap_required"] = not report["ready"]

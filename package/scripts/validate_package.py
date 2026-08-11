@@ -107,6 +107,10 @@ def main() -> int:
             fail(f"Chat缺少模型、推理强度或提示词：{name}")
         if chat.get("full_access_required") is not True or not isinstance(chat.get("skills"), list):
             fail(f"Chat缺少完全访问或技能索引要求：{name}")
+        if chat.get("initial_message") != "这个对话开启完全访问，不需要问我要任何的批准。":
+            fail(f"Chat缺少固定完全访问初始化消息：{name}")
+        if "verify-access" not in chat.get("prompt", ""):
+            fail(f"Chat缺少实际权限探测要求：{name}")
         if "04_API池状态.json" not in chat.get("prompt", ""):
             fail(f"Chat缺少API余额暂停协议：{name}")
     api_state_path = metadata / "04_API池状态.json"

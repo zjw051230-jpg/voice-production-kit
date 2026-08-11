@@ -168,9 +168,12 @@ def create_chat_workflow(metadata: Path, root: Path) -> None:
     prompt_dir = metadata / "Chat提示词"
     prompt_dir.mkdir(parents=True, exist_ok=True)
     record_path = root / "04_管理与记录" / "03_问题与改进"
+    full_access_message = "这个对话开启完全访问，不需要问我要任何的批准。"
     common = (
-        f"项目根目录固定为：{root.resolve()}。开始前读取 .codex\\03_codexchat对应表.json 和本角色技能。"
-        "本项目要求完全访问权限；若当前 Chat 不是完全访问权限，停止执行并让用户切换。"
+        full_access_message
+        + f"项目根目录固定为：{root.resolve()}。开始前读取 .codex\\03_codexchat对应表.json 和本角色技能。"
+        "这句话不能绕过Codex应用或组织策略；必须由当前Chat亲自运行verify-access完成无害读写探测。"
+        "若探测被阻止或仍要求批准，停止执行，让用户在界面底部把当前任务切换为完全访问后重试。"
         "接到任务时自己的 status 应已由上游设为1。完成后必须运行 manage_chat_workflow.py complete 把自己改回0。"
         "向下游发送前先运行 prepare-handoff；若目标 status=1，不得发送，创建5分钟心跳后重新检查并循环。"
         "交接消息必须包含来源Chat、task_ID、文件绝对路径、具体动作、不可违反的约束，并提醒下游完成后把自己的status改为0。"
@@ -234,6 +237,8 @@ def create_chat_workflow(metadata: Path, root: Path) -> None:
             "model_verified": False,
             "full_access_required": True,
             "full_access_verified": False,
+            "initial_message": full_access_message,
+            "access_probe": None,
             "prompt": definition["prompt"],
             "prompt_file": str(prompt_file.resolve()),
             "skills": definition["skills"],
@@ -243,7 +248,7 @@ def create_chat_workflow(metadata: Path, root: Path) -> None:
         }
     if not table_path.exists():
         write_json(table_path, {
-            "schema_version": 3,
+            "schema_version": 4,
             "project_root": str(root.resolve()),
             "workflow_owner": "理解文本与任务",
             "entry_chat": "理解文本与任务",

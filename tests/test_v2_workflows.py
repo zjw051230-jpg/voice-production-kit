@@ -215,18 +215,34 @@ def test_chat_workflow(root: Path) -> dict:
         return run(
             "register", "--chat", chat, "--thread-id", thread,
             "--actual-model", model, "--actual-reasoning-effort", effort,
-            "--full-access-verified", "true",
         )
+
+    def verify_access(chat: str) -> dict:
+        return run("verify-access", "--chat", chat)
 
     initial = run("bootstrap-status", expected=4)
     assert initial["bootstrap_required"] is True
     assert set(initial["missing_threads"]) == {"理解文本与任务", "提示词", "生成", "监控", "拉回", "记录"}
+    assert set(initial["chat_creation_contracts"]) == set(models)
+    assert all(
+        contract["initial_message"] == "这个对话开启完全访问，不需要问我要任何的批准。"
+        and contract["access_verification"]["must_run_in_target_chat"] is True
+        for contract in initial["chat_creation_contracts"].values()
+    )
+    self_report = subprocess.run(
+        [sys.executable, str(script), "--project-root", str(project), "register",
+         "--chat", "理解文本与任务", "--thread-id", "thread-owner",
+         "--actual-model", "gpt-5.6-sol", "--actual-reasoning-effort", "medium",
+         "--full-access-verified", "true"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", env=env,
+    )
+    assert self_report.returncode != 0
 
     wrong_model = subprocess.run(
         [sys.executable, str(script), "--project-root", str(project), "register",
          "--chat", "理解文本与任务", "--thread-id", "thread-owner",
          "--actual-model", "gpt-5.6-terra", "--actual-reasoning-effort", "medium",
-         "--full-access-verified", "true"],
+        ],
         capture_output=True, text=True, encoding="utf-8", errors="replace", env=env,
     )
     assert wrong_model.returncode != 0 and "模型不匹配" in wrong_model.stderr
@@ -234,12 +250,19 @@ def test_chat_workflow(root: Path) -> dict:
         [sys.executable, str(script), "--project-root", str(project), "register",
          "--chat", "理解文本与任务", "--thread-id", "thread-owner",
          "--actual-model", "gpt-5.6-sol", "--actual-reasoning-effort", "low",
-         "--full-access-verified", "true"],
+        ],
         capture_output=True, text=True, encoding="utf-8", errors="replace", env=env,
     )
     assert wrong_effort.returncode != 0 and "思考程度不匹配" in wrong_effort.stderr
 
     register("理解文本与任务", "thread-owner")
+    access_blocked = run("bootstrap-status", expected=4)
+    assert "理解文本与任务" in access_blocked["unverified_full_access"]
+    owner_access = verify_access("理解文本与任务")
+    assert owner_access["full_access_verified"] is True
+    assert not list((project / ".codex").glob(".full-access-probe-*.tmp"))
+
+    verify_access("提示词")
     register("提示词", "thread-prompt")
     blocked_bootstrap = run(
         "prepare-handoff", "--from-chat", "理解文本与任务", "--to-chat", "提示词",
@@ -252,7 +275,7 @@ def test_chat_workflow(root: Path) -> dict:
         [sys.executable, str(script), "--project-root", str(project), "register",
          "--chat", "生成", "--thread-id", "thread-prompt",
          "--actual-model", "gpt-5.6-terra", "--actual-reasoning-effort", "medium",
-         "--full-access-verified", "true"],
+        ],
         capture_output=True, text=True, encoding="utf-8", errors="replace", env=env,
     )
     assert duplicate.returncode != 0 and "thread_id已登记给其他Chat" in duplicate.stderr
@@ -261,6 +284,7 @@ def test_chat_workflow(root: Path) -> dict:
         ("生成", "thread-generate"), ("监控", "thread-monitor"),
         ("拉回", "thread-download"), ("记录", "thread-record"),
     ):
+        verify_access(chat)
         register(chat, thread)
     bootstrapped = run("bootstrap-status")
     assert bootstrapped["ready"] is True and bootstrapped["duplicate_thread_ids"] == []
@@ -284,7 +308,7 @@ def test_chat_workflow(root: Path) -> dict:
     assert blocked["paused"] is True and blocked["required_target"] == "理解文本与任务"
     emergency = run("prepare-handoff", "--from-chat", "生成", "--to-chat", "理解文本与任务", "--summary", "余额不足")
     assert emergency["emergency"] is True and emergency["thread_id"] == "thread-owner"
-    return {"chat_workflow": "OK", "bootstrap_gate": "OK", "model_contract": "OK", "busy_retry_minutes": 5, "pause_gate": "OK"}
+    return {"chat_workflow": "OK", "bootstrap_gate": "OK", "model_contract": "OK", "full_access_probe": "OK", "busy_retry_minutes": 5, "pause_gate": "OK"}
 
 
 def test_prompt_manifest_and_provenance(root: Path) -> dict:

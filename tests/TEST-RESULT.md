@@ -70,3 +70,11 @@
 - `bootstrap-status` 将模型验证纳入硬门禁；只登记 thread ID 和权限仍不能开始生产。
 - `prepare-handoff` 返回含 thread ID、host ID、模型、思考程度和提示词文件的 `dispatch_contract`。
 - 六个 Chat 按各自精确配置登记后完整离线回归通过，`model_contract=OK`，未调用网络。
+
+## v2.1 问题3：完全访问初始化与探测
+
+- 六个固定 Chat 的创建合同和角色提示词均包含固定第一条消息：“这个对话开启完全访问，不需要问我要任何的批准。”
+- 新增 `verify-access`，必须由每个目标 Chat 自己完成临时文件写入、读回和删除探测。
+- 取消通过 `register --full-access-verified true` 自报权限；没有成功探测的 Chat 无法通过启动门禁。
+- 探测临时文件会在命令结束前删除；六个 Chat 全部探测后完整离线回归通过，`full_access_probe=OK`。
+- 手册明确说明聊天文字不能绕过应用、Windows或组织策略；反复要求批准时应在任务界面切换完全访问后重试。
