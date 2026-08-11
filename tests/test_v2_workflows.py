@@ -142,57 +142,78 @@ def test_ccswitch_mapping(root: Path) -> dict:
         "unrelated": {"keep": True},
     }
     other = {"config": 'model = "unchanged"\n', "unrelated": {"keep": "other"}}
-    catalog = fixture / "cc-switch-model-catalog.json"
-    original_catalog = {"models": [
-        {"slug": "old-upstream", "display_name": "gpt-5.5", "extra": "keep"},
-        {"slug": "gpt-5.6-sol", "display_name": "gpt-5.6-sol"},
-        {"slug": "other-model", "display_name": "其他"},
-    ]}
-    catalog.write_text(json.dumps(original_catalog, ensure_ascii=False), encoding="utf-8")
+    original_meta = {
+        "apiFormat": "openai_responses",
+        "endpointAutoSelect": True,
+        "localProxyRequestOverrides": {
+            "headers": {"X-Keep": "yes"},
+            "body": {"temperature": 0.2},
+            "modelRoutes": {"existing-model": "existing-upstream"},
+        },
+    }
+    other_meta = {"apiFormat": "openai_chat", "keep": "other"}
     live_config = fixture / "config.toml"
     live_original = original_config + '\n[desktop]\nfollowUpQueueMode = "queue"\n'
     live_config.write_text(live_original, encoding="utf-8")
     with sqlite3.connect(db) as connection:
-        connection.execute("CREATE TABLE providers (id TEXT PRIMARY KEY, name TEXT, settings_config TEXT, app_type TEXT, is_current INTEGER)")
-        connection.execute("INSERT INTO providers VALUES (?,?,?,?,?)", ("p1", "Current", json.dumps(original), "codex", 1))
-        connection.execute("INSERT INTO providers VALUES (?,?,?,?,?)", ("p2", "Other", json.dumps(other), "codex", 0))
+        connection.execute("CREATE TABLE providers (id TEXT PRIMARY KEY, name TEXT, settings_config TEXT, meta TEXT, app_type TEXT, is_current INTEGER)")
+        connection.execute("INSERT INTO providers VALUES (?,?,?,?,?,?)", ("p1", "Current", json.dumps(original), json.dumps(original_meta), "codex", 1))
+        connection.execute("INSERT INTO providers VALUES (?,?,?,?,?,?)", ("p2", "Other", json.dumps(other), json.dumps(other_meta), "codex", 0))
+        connection.execute("INSERT INTO providers VALUES (?,?,?,?,?,?)", ("p3", "Empty Meta", json.dumps(other), "{}", "codex", 0))
     connection.close()
 
     script = PACKAGE / "scripts" / "configure_ccswitch_model.py"
     child_env = dict(os.environ, PYTHONIOENCODING="utf-8")
     dry = subprocess.run(
-        [sys.executable, str(script), "--db", str(db), "--catalog", str(catalog),
-         "--live-config", str(live_config), "--dry-run"],
+        [sys.executable, str(script), "--db", str(db), "--skip-binary-check", "--dry-run"],
         capture_output=True, text=True, encoding="utf-8", errors="replace", env=child_env,
     )
-    assert dry.returncode == 0 and "preview: 5.5 -> deepseek-v4-pro" in dry.stdout
+    assert dry.returncode == 0 and "preview: gpt-5.5 -> deepseek-v4-pro" in dry.stdout
     with sqlite3.connect(db) as connection:
         assert json.loads(connection.execute("SELECT settings_config FROM providers WHERE id='p1'").fetchone()[0]) == original
+        assert json.loads(connection.execute("SELECT meta FROM providers WHERE id='p1'").fetchone()[0]) == original_meta
     connection.close()
     applied = subprocess.run(
-        [sys.executable, str(script), "--db", str(db), "--catalog", str(catalog),
-         "--live-config", str(live_config)],
+        [sys.executable, str(script), "--db", str(db), "--skip-binary-check"],
         capture_output=True, text=True, encoding="utf-8", errors="replace", env=child_env,
     )
     assert applied.returncode == 0 and "integrity_check: ok" in applied.stdout
     with sqlite3.connect(db) as connection:
         current = json.loads(connection.execute("SELECT settings_config FROM providers WHERE id='p1'").fetchone()[0])
+        current_meta = json.loads(connection.execute("SELECT meta FROM providers WHERE id='p1'").fetchone()[0])
         untouched = json.loads(connection.execute("SELECT settings_config FROM providers WHERE id='p2'").fetchone()[0])
+        untouched_meta = json.loads(connection.execute("SELECT meta FROM providers WHERE id='p2'").fetchone()[0])
         assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
     connection.close()
-    models = json.loads(catalog.read_text(encoding="utf-8"))["models"]
-    assert next(item for item in models if item["display_name"] == "gpt-5.5")["slug"] == "deepseek-v4-pro"
-    assert [item for item in models if item["display_name"] != "gpt-5.5"] == [item for item in original_catalog["models"] if item["display_name"] != "gpt-5.5"]
-    pointer = 'model_catalog_json = "cc-switch-model-catalog.json"'
-    assert current["config"].splitlines()[0] == pointer
-    assert "\n".join(current["config"].splitlines()[1:]) + "\n" == original_config
-    assert live_config.read_text(encoding="utf-8").splitlines()[0] == pointer
-    assert "\n".join(live_config.read_text(encoding="utf-8").splitlines()[1:]) + "\n" == live_original
+    routes = current_meta["localProxyRequestOverrides"]["modelRoutes"]
+    assert routes["gpt-5.5"] == "deepseek-v4-pro"
+    assert routes["existing-model"] == "existing-upstream"
+    assert current_meta["localProxyRequestOverrides"]["headers"] == {"X-Keep": "yes"}
+    assert current_meta["localProxyRequestOverrides"]["body"] == {"temperature": 0.2}
+    assert live_config.read_text(encoding="utf-8") == live_original
+    assert "model_catalog_json" not in current["config"]
     assert current["auth"] == original["auth"] and current["unrelated"] == original["unrelated"]
     assert untouched == other
-    assert list((fixture / "backups").glob("cc-switch.before-model-map.*.db"))
-    assert list((fixture / "backups").glob("cc-switch.before-model-map.*.catalog.json"))
-    assert list((fixture / "backups").glob("cc-switch.before-model-map.*.config.toml"))
+    assert untouched_meta == other_meta
+    assert list((fixture / "backups").glob("cc-switch.before-local-route.*.db"))
+
+    def route(model: str) -> str:
+        return routes.get(model, model)
+
+    assert route("gpt-5.5") == "deepseek-v4-pro"
+    for model in ("gpt-5.5-mini", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "other"):
+        assert route(model) == model
+
+    empty_meta = subprocess.run(
+        [sys.executable, str(script), "--db", str(db), "--skip-binary-check", "--provider-id", "p3"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", env=child_env,
+    )
+    assert empty_meta.returncode == 0 and "integrity_check: ok" in empty_meta.stdout
+    with sqlite3.connect(db) as connection:
+        p3_meta = json.loads(connection.execute("SELECT meta FROM providers WHERE id='p3'").fetchone()[0])
+    assert p3_meta == {
+        "localProxyRequestOverrides": {"modelRoutes": {"gpt-5.5": "deepseek-v4-pro"}}
+    }
     return {"ccswitch_mapping": "OK", "only_5_5_changed": True}
 
 
@@ -653,6 +674,7 @@ def test_documents() -> dict:
 
 def main() -> None:
     base = TEST_ROOT / ".test-artifacts"
+    base.mkdir(parents=True, exist_ok=True)
     root = Path(tempfile.mkdtemp(prefix="workflow-fixture-", dir=base))
     try:
         result = {}

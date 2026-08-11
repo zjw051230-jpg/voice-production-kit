@@ -27,6 +27,7 @@ dist/
 *.lnk
 .test-artifacts/
 test-workspace/
+tmp/
 
 # OS and editor files
 Thumbs.db

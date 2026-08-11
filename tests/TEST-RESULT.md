@@ -44,13 +44,14 @@
 
 - 程序本体产品版本为 3.18.0，安装包不包含用户数据库。
 - 假数据库 dry-run 不写入；正式执行前自动备份，执行后 `PRAGMA integrity_check` 为 `ok`。
+- CC Switch 运行时使用 SQLite 单事务在线更新，不停止承载 Codex 的本地代理；首次替换程序后只需在当前工作结束时重启一次。
 - 只有显示名严格等于 `5.5` 的模型改为 `deepseek-v4-pro`；`5.6-sol`、其他模型、其他 provider、API Key、base URL 和附加字段全部保持不变。
-- 映射通过 provider `config` 中的 `model_catalog_json` 引用持久化；数据库、目录文件和实时 `config.toml` 分别备份并校验。
+- 映射只写入 CC Switch provider `meta.localProxyRequestOverrides.modelRoutes`；只备份数据库，Codex `config.toml` 和模型目录保持不变。
 
 ## 文档与发布清洁
 
 - 人类快速说明已重新按真实操作顺序整理为九个步骤，包含可直接发送给 Codex 的安装、建项目、生成、监控、拉回、返工和修复指令；Markdown 标题、代码块和相对链接校验通过。
-- `START-HERE.md`、`INSTALL.md`、`API与CCSwitch配置.md`、安装包详细手册、精简说明和文档版详细手册均存在并标注 v2.0。
+- `START-HERE.md`、`INSTALL.md`、`API与CCSwitch配置.md`、安装包详细手册、精简说明和文档版详细手册均存在并标注 v2.1。
 - 文档覆盖项目创建、API 立即写盘、项目内 EXE、余额不足、CC Switch 严格映射、看板和常见错误；没有 v1.0.9 残留。
 - 安装包详细手册与文档目录详细手册字节一致；精简说明短于详细手册。
 - 17 个 Python 文件、6 个 PowerShell 文件和全部 JSON 通过语法或解析检查；PowerShell 文件统一为 Windows PowerShell 5 可识别的 UTF-8 BOM。

@@ -1,0 +1,73 @@
+diff --git a/src-tauri/src/provider.rs b/src-tauri/src/provider.rs
+--- a/src-tauri/src/provider.rs
++++ b/src-tauri/src/provider.rs
+@@
+ pub struct LocalProxyRequestOverrides {
+     pub headers: HashMap<String, String>,
+     pub body: Option<serde_json::Value>,
++    #[serde(default, rename = "modelRoutes", skip_serializing_if = "HashMap::is_empty")]
++    pub model_routes: HashMap<String, String>,
+ }
+@@
+-        self.headers.is_empty() && self.body.is_none()
++        self.headers.is_empty() && self.body.is_none() && self.model_routes.is_empty()
+diff --git a/src-tauri/src/proxy/forwarder.rs b/src-tauri/src/proxy/forwarder.rs
+--- a/src-tauri/src/proxy/forwarder.rs
++++ b/src-tauri/src/proxy/forwarder.rs
+@@
+-                if apply_local_proxy_body_overrides(&mut filtered_body, overrides) {
++                let original_request_model = body.get("model").and_then(Value::as_str);
++                if apply_local_proxy_body_overrides(&mut filtered_body, overrides, original_request_model) {
+@@
+ fn apply_local_proxy_body_overrides(
+     body: &mut Value,
+     overrides: &LocalProxyRequestOverrides,
++    original_request_model: Option<&str>,
+ ) -> bool {
+-    let Some(override_body) = overrides.body.as_ref() else {
+-        return false;
+-    };
+-    if !override_body.is_object() {
+-        log::warn!("[LocalProxyOverrides] Ignoring body override because it is not an object");
+-        return false;
++    const EXACT_MODEL_ROUTES_FEATURE: &str = "cc-switch-local-proxy-exact-model-routes-v1";
++    let mut changed = false;
++    if let Some(override_body) = overrides.body.as_ref() {
++        if override_body.is_object() {
++            changed |= merge_json_override(body, override_body);
++        }
+     }
+-    merge_json_override(body, override_body)
++    if let Some(request_model) = original_request_model.map(str::trim) {
++        if let Some(upstream_model) = overrides.model_routes.get(request_model)
++            .map(String::as_str).map(str::trim).filter(|model| !model.is_empty())
++        {
++            if body.get("model").and_then(Value::as_str) != Some(upstream_model) {
++                log::debug!("[{EXACT_MODEL_ROUTES_FEATURE}] Exact model route: {request_model} -> {upstream_model}");
++                body["model"] = Value::String(upstream_model.to_string());
++                changed = true;
++            }
++        }
++    }
++    changed
+ }
+diff --git a/src/types.ts b/src/types.ts
+--- a/src/types.ts
++++ b/src/types.ts
+@@
+ export interface LocalProxyRequestOverrides {
+   headers?: Record<string, string>;
+   body?: Record<string, unknown>;
++  modelRoutes?: Record<string, string>;
+ }
+diff --git a/src/components/providers/forms/ProviderForm.tsx b/src/components/providers/forms/ProviderForm.tsx
+--- a/src/components/providers/forms/ProviderForm.tsx
++++ b/src/components/providers/forms/ProviderForm.tsx
+@@
+       localProxyRequestOverrides: shouldApplyLocalProxyRequestOverrides
+-        ? overridesResult.overrides
++        ? {
++            ...overridesResult.overrides,
++            modelRoutes: initialData?.meta?.localProxyRequestOverrides?.modelRoutes,
++          }
+         : undefined,

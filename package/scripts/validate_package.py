@@ -167,6 +167,10 @@ def main() -> int:
     cc_switch_exe = package / "program" / "cc-switch" / "cc-switch.exe"
     if not cc_switch_exe.is_file() or cc_switch_exe.stat().st_size < 10_000_000:
         fail("安装包缺少有效的 CC Switch 程序本体")
+    if b"cc-switch-local-proxy-exact-model-routes-v1" not in cc_switch_exe.read_bytes():
+        fail("CC Switch 程序不支持内部精确模型路由")
+    if not (package / "program" / "cc-switch" / "LICENSE").is_file():
+        fail("安装包缺少 CC Switch MIT 许可文件")
     if any(path.suffix.lower() in {".db", ".db-wal", ".db-shm"} for path in package.rglob("*")):
         fail("安装包包含 CC Switch 或其他实时数据库")
     dashboard_app = args.workspace_root / ".codex-dashboard" / "app"

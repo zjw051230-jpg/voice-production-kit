@@ -24,7 +24,7 @@ if (Test-Path -LiteralPath $target) {
   $targetHash = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash
   if ($sourceHash -eq $targetHash) {
     $copyRequired = $false
-    Write-Output 'CC Switch 3.18.0 已存在，程序文件无需替换。'
+    Write-Output 'CC Switch 3.18.0 内部精确路由版已存在，程序文件无需替换。'
   } elseif (-not $Force) {
     $copyRequired = $false
     Write-Warning ("检测到已有 CC Switch，默认保留：{0}。用户批准后使用 -Force 备份并替换。" -f $target)
@@ -37,7 +37,7 @@ if (Test-Path -LiteralPath $target) {
 
 if ($copyRequired) {
   Copy-Item -LiteralPath $source -Destination $target -Force
-  Write-Output "CC Switch 3.18.0 已部署：$target"
+  Write-Output "CC Switch 3.18.0 内部精确路由版已部署：$target"
 }
 
 if ([string]::IsNullOrWhiteSpace($ShortcutPath)) {
@@ -51,7 +51,7 @@ $shell = New-Object -ComObject WScript.Shell
 $shortcut = $shell.CreateShortcut($ShortcutPath)
 $shortcut.TargetPath = $target
 $shortcut.WorkingDirectory = $targetDir
-$shortcut.Description = 'CC Switch 3.18.0'
+$shortcut.Description = 'CC Switch 3.18.0 内部精确路由版'
 $shortcut.Save()
 Write-Output "CC Switch 快捷方式：$ShortcutPath"
 Write-Output '未启动 CC Switch，未创建或修改用户数据库。'
