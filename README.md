@@ -1,32 +1,36 @@
 # 配音工作流工具
 
-面向 Codex 的多项目中文配音生产工具包，包含项目文件系统、Seedance 配音批处理、提示词生成、任务看板、API 配置和修复工具。
+面向 Codex 的多项目中文配音生产工具包，提供项目文件系统、Seedance 批量配音、提示词生成、监控拉回、MP3 提取、返工溯源和桌面任务看板。
 
-## 当前版本
+当前开发版本：`v2.1`，适用于 Windows。
 
-- 稳定基线：`v2.0`
-- 当前开发版本：`v2.1`，安装包、文档和测试环境同步维护
-
-## 仓库结构
-
-- `package/`：可直接安装的完整本体，包括 7 个 Skills、安装脚本、CC Switch、任务看板和 API 配置工具。
-- `docs/`：快速操作说明和详细使用手册。
-- `tests/`：可复现的测试代码与测试结果摘要，不包含测试工作区和真实配置。
-
-## 安装
-
-在 Windows PowerShell 中执行：
+## 快速安装
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File ".\package\install.ps1" -WorkspaceRoot "D:\配音工作区" -ProjectName "项目名称"
 ```
 
-同名 Skill 已存在且确认需要更新时，才添加 `-Force`。安装不会调用付费 API，不会上传媒体，也不会创建或复制 `D:\codex-board`。
+同名 Skill 已存在且确认需要替换时才添加 `-Force`。安装不会调用付费 API、上传素材或创建 `D:\codex-board`。
+
+安装完成后，对 Codex 说：
+
+```text
+我要创建项目，名字叫“项目名称”。
+```
+
+Codex 会继续收集剧本、台词、角色音色和 API 状态，并建立六个独立任务完成提示词、生成、监控、拉回和记录。
+
+## CC Switch
+
+`v2.1` 只在工具包内置 CC Switch 的本地代理中精确执行 `gpt-5.5 -> deepseek-v4-pro`。禁止使用 Codex 模型目录、`model_catalog_json`、无条件 body 覆盖或外置代理；其他模型和 provider 必须保持不变。
+
+## 文档
+
+- [快速操作说明](docs/配音工作流使用说明.md)
+- [详细用户手册](docs/配音工具详细使用手册.md)
+- [API 与 CC Switch 配置](package/API与CCSwitch配置.md)
+- [测试结果](tests/TEST-RESULT.md)
 
 ## 安全边界
 
-仓库不得提交 API Key、`cc-switch.db`、用户 provider 数据库、生产素材、生成视频、MP3、任务运行状态或本地隐藏目录。只允许提交空配置示例。
-
-## 版本流程
-
-稳定版本使用 Git 标签，例如 `v2.0`。新功能在对应版本分支开发，每项修改单独提交并测试，通过全部验收后再合并并发布安装 ZIP。
+仓库不包含 API Key、`cc-switch.db`、生产素材、生成视频、MP3 或本地任务状态。服务器和共享目录复制必须另行获得用户批准。
