@@ -1,9 +1,11 @@
 {
   "name": "portable-voice-production",
-  "version": "2.0",
-  "released": "2026-08-06",
-  "previous_version": "1.0.9",
+  "version": "2.1",
+  "released": "2026-08-11",
+  "previous_version": "2.0",
   "changes": [
+    "Added a mandatory six-Chat bootstrap gate that blocks production until every role has a unique thread ID and verified full access",
+    "Established synchronized installer and GitHub development workflows for v2.1",
     "Made API add, remove, and active-selection actions persist immediately instead of remaining in UI memory",
     "Fixed the API tool action bar so save controls remain visible at supported window sizes",
     "Installed the API configuration EXE and workspace locator inside every project's 04_管理与记录/01_API配置 directory",

@@ -54,3 +54,11 @@
 - 安装包详细手册与文档目录详细手册字节一致；精简说明短于详细手册。
 - 17 个 Python 文件、6 个 PowerShell 文件和全部 JSON 通过语法或解析检查；PowerShell 文件统一为 Windows PowerShell 5 可识别的 UTF-8 BOM。
 - 安装包无 `__pycache__`、`.pyc`、实时数据库、真实密钥、生产素材、服务器上传或 `D:\codex-board` 工具内容。
+
+## v2.1 问题1：强制六Chat分工
+
+- 新项目映射表初始为 `bootstrap_required=true`、`workflow_ready=false`。
+- `bootstrap-status` 在任一 Chat 缺少 thread ID、完全访问未验证或 thread ID 重复时返回失败。
+- `prepare-handoff` 在六个独立 Chat 全部就绪前拒绝业务交接。
+- 六个 Chat 全部登记且权限验证后，交接、忙碌重试和余额暂停流程继续正常工作。
+- `manage-voice-production` 通过 Skill 校验；完整离线工作流测试通过且未调用网络。

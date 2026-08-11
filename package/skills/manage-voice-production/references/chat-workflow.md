@@ -8,6 +8,25 @@
 
 所有Chat必须实际验证为“完全访问权限”。只在JSON中写 `full_access_required: true` 不算完成；验证后才把 `full_access_verified` 改为 `true`。
 
+## 入口硬门禁
+
+入口Chat不得继续单Chat执行。每次首次进入项目、创建项目或读取到旧版映射表时，先运行：
+
+```powershell
+py -3 scripts/manage_chat_workflow.py --project-root <项目> bootstrap-status
+```
+
+只有返回码0且 `ready=true` 才能处理业务。返回码4表示必须完成初始化：
+
+1. 把当前Codex任务命名为 `理解文本与任务`，登记它的实际thread ID。
+2. 使用Codex任务创建工具创建另外五个独立任务，禁止用子代理代替固定Chat。
+3. 使用映射表中的模型、推理强度和提示词初始化每个任务。
+4. 在每个任务中启用并实际验证完全访问权限。
+5. 使用 `register` 逐一写入互不重复的thread ID和权限验证结果。
+6. 再次运行 `bootstrap-status`；未就绪就继续初始化，不得编写提示词或调用Seedance。
+
+入口Chat只做理解、补问、拆解、派发和汇总。提示词、生成、监控、拉回、记录必须由对应独立Chat完成，所有业务派发都必须经过 `prepare-handoff`。
+
 ## 状态协议
 
 - `0`：空闲，可以接收。
@@ -47,3 +66,4 @@ py -3 scripts/manage_chat_workflow.py --project-root <项目> complete --chat �
 3. 把实际thread ID写回映射表。
 4. 逐个打开Chat，在界面底部把权限切换为“完全访问权限”，验证后登记。
 5. 初始提示词必须包含项目绝对路径、状态协议、反馈规则、模型、技能和角色边界。
+6. 最后运行 `bootstrap-status`，只有 `ready=true` 才能开始第一条任务。

@@ -1,11 +1,23 @@
 ---
 name: manage-voice-production
-description: Create, register, inspect, and maintain portable multi-project Chinese voice-production workspaces with a human-readable hierarchy and legacy tool-path compatibility. Use when setting up a new voice project, choosing a project root, installing this workflow, checking directory layout, or coordinating prompt generation, Seedance generation, MP3 extraction, repair, logging, and resumable state across projects.
+description: Create, register, inspect, and maintain portable multi-project Chinese voice-production workspaces with mandatory six-Chat delegation, a human-readable hierarchy, and legacy tool-path compatibility. Use when setting up a new voice project, choosing a project root, installing this workflow, checking directory layout, or coordinating prompt generation, Seedance generation, MP3 extraction, repair, logging, and resumable state across projects. The entry Chat must bootstrap and delegate to five separate downstream Chats before production begins.
 ---
 
 # 配音项目管理
 
 本技能是 Codex 操作入口。工作区下面直接放多个项目，例如 `工作区\项目1`、`工作区\项目2`。每个项目使用四个真实分类目录；隐藏的旧目录联接只用于兼容现有工具。
+
+## 强制六Chat门禁
+
+入口不得以单Chat执行完整流程。首次进入或创建项目后必须完整读取 [references/chat-workflow.md](references/chat-workflow.md)，并先运行：
+
+```powershell
+py -3 scripts/manage_chat_workflow.py --project-root <项目> bootstrap-status
+```
+
+返回码为4或 `ready=false` 时，立即停止业务处理。把当前任务命名为 `理解文本与任务`，使用 Codex 任务工具创建 `提示词`、`生成`、`监控`、`拉回`、`记录` 五个独立任务；按映射表逐个设置模型、推理强度、完整提示词和完全访问权限，并用 `register` 登记实际 thread ID。六个任务全部登记、thread ID 互不重复且完全访问均已验证后，`bootstrap-status` 才能返回0。
+
+入口只负责理解、补问、拆解、维护索引、派发和汇总，禁止代做提示词、生成、监控、拉回或记录。所有业务阶段必须先执行 `prepare-handoff`，再把任务发送到脚本返回的 thread ID；未通过门禁时脚本会拒绝交接。
 
 ## 新手创建项目
 

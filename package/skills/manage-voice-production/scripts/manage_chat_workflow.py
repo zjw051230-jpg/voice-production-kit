@@ -9,6 +9,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable
 
+CHAT_ORDER = ("理解文本与任务", "提示词", "生成", "监控", "拉回", "记录")
+
 
 def now() -> str:
     return datetime.now().astimezone().isoformat(timespec="seconds")
@@ -62,6 +64,40 @@ def get_chat(data: dict[str, Any], name: str) -> dict[str, Any]:
     return chat
 
 
+def bootstrap_report(data: dict[str, Any]) -> dict[str, Any]:
+    chats = data.get("chats", {})
+    missing_chats = [name for name in CHAT_ORDER if not isinstance(chats.get(name), dict)]
+    missing_threads = [
+        name for name in CHAT_ORDER
+        if isinstance(chats.get(name), dict) and not chats[name].get("thread_id")
+    ]
+    unverified_access = [
+        name for name in CHAT_ORDER
+        if isinstance(chats.get(name), dict) and not chats[name].get("full_access_verified")
+    ]
+    thread_ids = [
+        chats[name].get("thread_id") for name in CHAT_ORDER
+        if isinstance(chats.get(name), dict) and chats[name].get("thread_id")
+    ]
+    duplicate_threads = sorted({item for item in thread_ids if thread_ids.count(item) > 1})
+    ready = not (missing_chats or missing_threads or unverified_access or duplicate_threads)
+    return {
+        "ready": ready,
+        "bootstrap_required": not ready,
+        "entry_chat": "理解文本与任务",
+        "required_chats": list(CHAT_ORDER),
+        "missing_chats": missing_chats,
+        "missing_threads": missing_threads,
+        "unverified_full_access": unverified_access,
+        "duplicate_thread_ids": duplicate_threads,
+        "next_action": (
+            "使用Codex任务工具把当前任务命名为‘理解文本与任务’，创建另外五个独立任务，"
+            "按映射表设置模型、推理强度、提示词和完全访问权限，再逐个register"
+            if not ready else "入口Chat必须通过prepare-handoff派发工作，不得单Chat代做下游阶段"
+        ),
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="原子管理多Chat配音工作流")
     parser.add_argument("--project-root", required=True, type=Path)
@@ -88,6 +124,7 @@ def main() -> int:
 
     sub.add_parser("show")
     sub.add_parser("check-pause")
+    sub.add_parser("bootstrap-status")
     args = parser.parse_args()
     path = table_path(args.project_root)
 
@@ -101,13 +138,24 @@ def main() -> int:
         print(json.dumps(state, ensure_ascii=False, indent=2))
         return 3 if state.get("workflow_paused") else 0
 
+    if args.command == "bootstrap-status":
+        report = bootstrap_report(load(path))
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0 if report["ready"] else 4
+
     if args.command == "register":
         def action(data: dict[str, Any]) -> dict[str, Any]:
             chat = get_chat(data, args.chat)
+            for name, existing in data.get("chats", {}).items():
+                if name != args.chat and existing.get("thread_id") == args.thread_id:
+                    raise ValueError(f"thread_id已登记给其他Chat：{name}")
             chat["thread_id"] = args.thread_id
             chat["host_id"] = args.host_id
             chat["full_access_verified"] = args.full_access_verified == "true"
-            return chat
+            report = bootstrap_report(data)
+            data["workflow_ready"] = report["ready"]
+            data["bootstrap_required"] = not report["ready"]
+            return {"chat": chat, "bootstrap": report}
         result = mutate(path, action)
         print(json.dumps(result, ensure_ascii=False))
         return 0
@@ -153,6 +201,11 @@ def main() -> int:
                     "reasoning_effort": target["reasoning_effort"],
                     "message_requirement": "余额不足紧急消息；完成恢复前不得派发其他Chat",
                 }
+            bootstrap = bootstrap_report(data)
+            if not bootstrap["ready"]:
+                data["workflow_ready"] = False
+                data["bootstrap_required"] = True
+                return bootstrap
             if target.get("status") == 1:
                 retry = int(data.get("busy_retry_minutes", 5))
                 return {

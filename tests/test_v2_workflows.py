@@ -11,8 +11,8 @@ import time
 import tkinter as tk
 from pathlib import Path
 
-PACKAGE = Path(r"D:\配音工具总结\安装包\v2.0")
-TEST_ROOT = Path(r"D:\配音工具总结\test\v2.0")
+PACKAGE = Path(r"D:\配音工具总结\安装包\v2.1")
+TEST_ROOT = Path(r"D:\配音工具总结\test\v2.1")
 API_SCRIPTS = PACKAGE / "skills" / "seedance-voice-video-batch" / "scripts"
 PROJECT_SCRIPTS = PACKAGE / "skills" / "manage-voice-production" / "scripts"
 sys.path[:0] = [str(API_SCRIPTS), str(PROJECT_SCRIPTS)]
@@ -201,8 +201,34 @@ def test_chat_workflow(root: Path) -> dict:
         assert completed.returncode == expected, completed.stdout + completed.stderr
         return json.loads(completed.stdout)
 
+    initial = run("bootstrap-status", expected=4)
+    assert initial["bootstrap_required"] is True
+    assert set(initial["missing_threads"]) == {"理解文本与任务", "提示词", "生成", "监控", "拉回", "记录"}
+
     run("register", "--chat", "理解文本与任务", "--thread-id", "thread-owner", "--full-access-verified", "true")
     run("register", "--chat", "提示词", "--thread-id", "thread-prompt", "--full-access-verified", "true")
+    blocked_bootstrap = run(
+        "prepare-handoff", "--from-chat", "理解文本与任务", "--to-chat", "提示词",
+        "--summary", "初始化未完成", expected=2,
+    )
+    assert blocked_bootstrap["bootstrap_required"] is True
+    assert "生成" in blocked_bootstrap["missing_threads"]
+
+    duplicate = subprocess.run(
+        [sys.executable, str(script), "--project-root", str(project), "register",
+         "--chat", "生成", "--thread-id", "thread-prompt", "--full-access-verified", "true"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", env=env,
+    )
+    assert duplicate.returncode != 0 and "thread_id已登记给其他Chat" in duplicate.stderr
+
+    for chat, thread in (
+        ("生成", "thread-generate"), ("监控", "thread-monitor"),
+        ("拉回", "thread-download"), ("记录", "thread-record"),
+    ):
+        run("register", "--chat", chat, "--thread-id", thread, "--full-access-verified", "true")
+    bootstrapped = run("bootstrap-status")
+    assert bootstrapped["ready"] is True and bootstrapped["duplicate_thread_ids"] == []
+
     ready = run("prepare-handoff", "--from-chat", "理解文本与任务", "--to-chat", "提示词", "--task-id", "T001", "--summary", "测试交接")
     assert ready["ready"] is True and ready["thread_id"] == "thread-prompt"
     busy = run("prepare-handoff", "--from-chat", "理解文本与任务", "--to-chat", "提示词", "--summary", "重复交接", expected=2)
@@ -217,7 +243,7 @@ def test_chat_workflow(root: Path) -> dict:
     assert blocked["paused"] is True and blocked["required_target"] == "理解文本与任务"
     emergency = run("prepare-handoff", "--from-chat", "生成", "--to-chat", "理解文本与任务", "--summary", "余额不足")
     assert emergency["emergency"] is True and emergency["thread_id"] == "thread-owner"
-    return {"chat_workflow": "OK", "busy_retry_minutes": 5, "pause_gate": "OK"}
+    return {"chat_workflow": "OK", "bootstrap_gate": "OK", "busy_retry_minutes": 5, "pause_gate": "OK"}
 
 
 def test_prompt_manifest_and_provenance(root: Path) -> dict:
@@ -311,8 +337,8 @@ def test_documents() -> dict:
         "install": PACKAGE / "INSTALL.md",
         "api": PACKAGE / "API与CCSwitch配置.md",
         "manual": PACKAGE / "详细使用手册.md",
-        "quick": Path(r"D:\配音工具总结\文档\v2.0\配音工作流使用说明.md"),
-        "published_manual": Path(r"D:\配音工具总结\文档\v2.0\配音工具详细使用手册.md"),
+        "quick": Path(r"D:\配音工具总结\文档\v2.1\配音工作流使用说明.md"),
+        "published_manual": Path(r"D:\配音工具总结\文档\v2.1\配音工具详细使用手册.md"),
     }
     for path in docs.values():
         assert path.is_file() and path.stat().st_size > 300
