@@ -28,6 +28,7 @@ Codex 会继续收集剧本、台词、角色音色和 API 状态，并建立六
 
 - [快速操作说明](docs/配音工作流使用说明.md)
 - [详细用户手册](docs/配音工具详细使用手册.md)
+- [v2.1 更新公告与自动更新指令](docs/v2.1更新公告.md)
 - [API 与 CC Switch 配置](package/API与CCSwitch配置.md)
 - [测试结果](tests/TEST-RESULT.md)
 

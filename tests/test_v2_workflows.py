@@ -11,6 +11,7 @@ import time
 import tkinter as tk
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = Path(r"D:\配音工具总结\安装包\v2.1")
 TEST_ROOT = Path(r"D:\配音工具总结\test\v2.1")
 API_SCRIPTS = PACKAGE / "skills" / "seedance-voice-video-batch" / "scripts"
@@ -645,8 +646,10 @@ def test_documents() -> dict:
         "install": PACKAGE / "INSTALL.md",
         "api": PACKAGE / "API与CCSwitch配置.md",
         "manual": PACKAGE / "详细使用手册.md",
+        "announcement": PACKAGE / "v2.1更新公告.md",
         "quick": Path(r"D:\配音工具总结\文档\v2.1\配音工作流使用说明.md"),
         "published_manual": Path(r"D:\配音工具总结\文档\v2.1\配音工具详细使用手册.md"),
+        "published_announcement": Path(r"D:\配音工具总结\文档\v2.1\v2.1更新公告.md"),
     }
     for path in docs.values():
         assert path.is_file() and path.stat().st_size > 300
@@ -656,7 +659,18 @@ def test_documents() -> dict:
     for required in ("创建项目", "Seedance API配置工具", "立即写", "余额不足", "5.5", "deepseek-v4-pro", "D:\\codex-board"):
         assert required in combined, f"documentation missing: {required}"
     assert docs["manual"].read_bytes() == docs["published_manual"].read_bytes()
+    assert docs["announcement"].read_bytes() == docs["published_announcement"].read_bytes()
     assert docs["quick"].stat().st_size < docs["manual"].stat().st_size
+    announcement = docs["announcement"].read_text(encoding="utf-8-sig")
+    for required in (
+        "voice-production-toolkit4bingchuan", "develop/v2.1", "pull --ff-only",
+        "install.ps1 -Force", "configure_ccswitch_model.py --dry-run",
+        "不得调用 Seedance", "不得向服务器", "integrity_check: ok",
+    ):
+        assert required in announcement, f"update announcement missing: {required}"
+    assert announcement.count("```text") == 1
+    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8-sig")
+    assert "docs/v2.1更新公告.md" in readme
     manual = docs["manual"].read_text(encoding="utf-8-sig")
     assert len(manual.encode("utf-8")) > 18000
     for section in ("第一次使用", "日常生产", "故障处理", "状态说明", "交付检查清单", "参考资料"):
