@@ -104,6 +104,16 @@ def bootstrap_report(data: dict[str, Any]) -> dict[str, Any]:
         if isinstance(chats.get(name), dict) and chats[name].get("thread_id")
     ]
     duplicate_threads = sorted({item for item in thread_ids if thread_ids.count(item) > 1})
+    record_chat = chats.get("记录") if isinstance(chats.get("记录"), dict) else {}
+    record_policy_errors = []
+    if record_chat.get("feedback_required") is not False:
+        record_policy_errors.append("记录.feedback_required必须为false")
+    if record_chat.get("feedback_to") is not None:
+        record_policy_errors.append("记录.feedback_to必须为null")
+    if record_chat.get("next_chat") is not None:
+        record_policy_errors.append("记录.next_chat必须为null")
+    if data.get("record_is_one_way") is not True:
+        record_policy_errors.append("record_is_one_way必须为true")
     creation_contracts = {
         name: {
             "model": chats[name].get("model"),
@@ -121,7 +131,7 @@ def bootstrap_report(data: dict[str, Any]) -> dict[str, Any]:
     }
     ready = not (
         missing_chats or missing_threads or unverified_access or unverified_models
-        or model_mismatches or duplicate_threads
+        or model_mismatches or duplicate_threads or record_policy_errors
     )
     return {
         "ready": ready,
@@ -135,6 +145,7 @@ def bootstrap_report(data: dict[str, Any]) -> dict[str, Any]:
         "model_mismatches": model_mismatches,
         "duplicate_thread_ids": duplicate_threads,
         "chat_creation_contracts": creation_contracts,
+        "record_policy_errors": record_policy_errors,
         "next_action": (
             "使用Codex任务工具把当前任务命名为‘理解文本与任务’，创建另外五个独立任务，"
             "按chat_creation_contracts创建每个任务，并把initial_message作为第一条消息；"
@@ -285,7 +296,8 @@ def main() -> int:
             chat["active_task"] = None
             feedback_target_name = chat.get("feedback_to")
             feedback_contract = None
-            if chat.get("feedback_required") and feedback_target_name:
+            one_way_terminal = args.chat == "记录"
+            if not one_way_terminal and chat.get("feedback_required") and feedback_target_name:
                 feedback_target = get_chat(data, feedback_target_name)
                 waiting = feedback_target.get("waiting_for_feedback")
                 acknowledgement_required = bool(
@@ -312,6 +324,8 @@ def main() -> int:
                 "status": 0,
                 "completed_task": completed,
                 "feedback_contract": feedback_contract,
+                "one_way_terminal": one_way_terminal,
+                "report_to_owner": False if one_way_terminal else bool(feedback_contract),
             }
         print(json.dumps(mutate(path, action), ensure_ascii=False))
         return 0
@@ -378,6 +392,8 @@ def main() -> int:
                     },
                     "message_requirement": "余额不足紧急消息；完成恢复前不得派发其他Chat",
                 }
+            if args.from_chat == "记录":
+                raise ValueError("记录Chat是单向终止阶段；禁止向主线程或任何其他Chat交接、汇报")
             bootstrap = bootstrap_report(data)
             if not bootstrap["ready"]:
                 data["workflow_ready"] = False
@@ -442,7 +458,12 @@ def main() -> int:
             target["status"] = 1
             target["active_task"] = active_task
             data.setdefault("pending_retries", {}).pop(retry_automation_id, None)
-            must_wait = bool(args.from_chat == owner_name and target.get("feedback_required"))
+            one_way_terminal = args.to_chat == "记录"
+            must_wait = bool(
+                args.from_chat == owner_name
+                and target.get("feedback_required")
+                and not one_way_terminal
+            )
             if must_wait:
                 source["waiting_for_feedback"] = {
                     "from_chat": args.to_chat,
@@ -475,6 +496,8 @@ def main() -> int:
                 },
                 "active_task": active_task,
                 "must_stop_and_wait": must_wait,
+                "one_way_terminal": one_way_terminal,
+                "report_to_owner": False if one_way_terminal else bool(target.get("feedback_required")),
                 "post_send_action": {
                     "action": "stop_and_wait_for_feedback",
                     "thread_id": target["thread_id"],
@@ -482,9 +505,15 @@ def main() -> int:
                     "lease_id": lease_id,
                     "instruction": "消息发出后立即停止本轮继续处理，调用Codex任务等待工具；收到反馈后运行ack-feedback",
                 } if must_wait else None,
+                "completion_policy": (
+                    "记录Chat只写记录并使用lease-id运行complete；不得向主线程或其他Chat发送消息。"
+                    "主对话知道此阶段无反馈，不等待记录Chat，派发后本轮结束。"
+                    if one_way_terminal else
+                    "接收者完成后使用同一lease-id运行complete并按feedback_contract反馈。"
+                ),
                 "message_requirement": (
                     "消息中必须附带lease-id，并提醒接收者完成后使用同一lease-id运行complete；"
-                    "主对话发送后立即停止并等待反馈"
+                    + ("记录阶段禁止任何汇报" if one_way_terminal else "主对话发送后立即停止并等待反馈")
                 ),
             }
         result = mutate(path, action)

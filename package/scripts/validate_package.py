@@ -118,6 +118,17 @@ def main() -> int:
                 fail(f"Chat缺少租约或等待字段：{name}/{field}")
         if "lease_id" not in chat.get("prompt", ""):
             fail(f"Chat缺少任务租约要求：{name}")
+    record_chat = chat_table["chats"]["记录"]
+    if (
+        record_chat.get("feedback_required") is not False
+        or record_chat.get("feedback_to") is not None
+        or record_chat.get("next_chat") is not None
+        or chat_table.get("record_is_one_way") is not True
+        or chat_table.get("record_reports_to_owner") is not False
+    ):
+        fail("记录Chat必须是无反馈的单向终止阶段")
+    if "禁止调用prepare-handoff" not in record_chat.get("prompt", ""):
+        fail("记录Chat提示词缺少禁止汇报硬约束")
         if "04_API池状态.json" not in chat.get("prompt", ""):
             fail(f"Chat缺少API余额暂停协议：{name}")
     api_state_path = metadata / "04_API池状态.json"

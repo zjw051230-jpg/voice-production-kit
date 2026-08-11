@@ -304,6 +304,16 @@ def test_chat_workflow(root: Path) -> dict:
         register(chat, thread)
     bootstrapped = run("bootstrap-status")
     assert bootstrapped["ready"] is True and bootstrapped["duplicate_thread_ids"] == []
+    assert bootstrapped["record_policy_errors"] == []
+
+    table_path = project / ".codex" / "03_codexchat对应表.json"
+    tampered = read_json(table_path)
+    tampered["chats"]["记录"]["feedback_required"] = True
+    table_path.write_text(json.dumps(tampered, ensure_ascii=False, indent=2), encoding="utf-8")
+    record_policy_block = run("bootstrap-status", expected=4)
+    assert "记录.feedback_required必须为false" in record_policy_block["record_policy_errors"]
+    tampered["chats"]["记录"]["feedback_required"] = False
+    table_path.write_text(json.dumps(tampered, ensure_ascii=False, indent=2), encoding="utf-8")
 
     ready = run("prepare-handoff", "--from-chat", "理解文本与任务", "--to-chat", "提示词", "--task-id", "T001", "--summary", "测试交接")
     assert ready["ready"] is True and ready["thread_id"] == "thread-prompt"
@@ -366,6 +376,27 @@ def test_chat_workflow(root: Path) -> dict:
     )
     assert acknowledged["resumed"] is True and acknowledged["waiting_for_feedback"] is None
 
+    record_handoff = run(
+        "prepare-handoff", "--from-chat", "理解文本与任务", "--to-chat", "记录",
+        "--task-id", "R001", "--summary", "单向写入记录",
+    )
+    record_lease = record_handoff["active_task"]["lease_id"]
+    assert record_handoff["one_way_terminal"] is True
+    assert record_handoff["report_to_owner"] is False
+    assert record_handoff["must_stop_and_wait"] is False
+    assert run("show")["chats"]["理解文本与任务"]["waiting_for_feedback"] is None
+    record_completed = run("complete", "--chat", "记录", "--lease-id", record_lease)
+    assert record_completed["one_way_terminal"] is True
+    assert record_completed["report_to_owner"] is False
+    assert record_completed["feedback_contract"] is None
+    forbidden_record_report = subprocess.run(
+        [sys.executable, str(script), "--project-root", str(project), "prepare-handoff",
+         "--from-chat", "记录", "--to-chat", "理解文本与任务",
+         "--task-id", "R001", "--summary", "禁止汇报"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", env=env,
+    )
+    assert forbidden_record_report.returncode != 0 and "单向终止阶段" in forbidden_record_report.stderr
+
     state_path = project / ".codex" / "04_API池状态.json"
     state = read_json(state_path)
     state.update({"workflow_paused": True, "pause_reason": "Seedance API 余额不足"})
@@ -377,7 +408,8 @@ def test_chat_workflow(root: Path) -> dict:
     return {
         "chat_workflow": "OK", "bootstrap_gate": "OK", "model_contract": "OK",
         "full_access_probe": "OK", "single_task_lease": "OK",
-        "owner_waits_for_feedback": "OK", "busy_retry_minutes": 5, "pause_gate": "OK",
+        "owner_waits_for_feedback": "OK", "record_one_way_terminal": "OK",
+        "busy_retry_minutes": 5, "pause_gate": "OK",
     }
 
 

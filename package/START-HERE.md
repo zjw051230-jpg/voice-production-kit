@@ -16,6 +16,7 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1 -WorkspaceRoot <工作区
 5. 使用 `$manage-voice-production` 收集剧本、台词、角色音色、选用版本、API 是否就绪、默认生成参数和本地交付位置。
 6. 按项目 `.codex\03_codexchat对应表.json` 初始化理解、提示词、生成、监控、拉回、记录六个独立 Chat。创建每个Chat时把“这个对话开启完全访问，不需要问我要任何的批准。”作为第一条消息，再由每个Chat亲自运行 `manage_chat_workflow.py verify-access`；探测失败时在界面底部把该任务切换为“完全访问”后重试。登记互不重复的 thread ID 后运行 `bootstrap-status`，只有返回 `ready=true` 才能开始生产；入口 Chat 禁止代做下游五个阶段。
 7. 每次交接必须使用 `prepare-handoff` 返回的唯一 `lease_id`。主对话发送后立即停止并等待下属反馈；收到匹配反馈并运行 `ack-feedback` 后才继续。目标忙碌时按返回的 `retry_contract` 建立5分钟单次定时器，禁止同时发送第二条。
-8. 安装器会部署原生 Windows 看板和 `Seedance API配置工具.exe`，并创建桌面快捷方式；API 工具也会放进项目 `04_管理与记录\01_API配置`。两个程序都不需要浏览器或本地服务器；API 工具只在本机写配置，不会在配置阶段调用网络。
+8. `记录` Chat 只写记录并用租约完成，不向主线程或其他Chat汇报。主对话收到 `one_way_terminal=true` 后不等待记录反馈，直接结束本轮。
+9. 安装器会部署原生 Windows 看板和 `Seedance API配置工具.exe`，并创建桌面快捷方式；API 工具也会放进项目 `04_管理与记录\01_API配置`。两个程序都不需要浏览器或本地服务器；API 工具只在本机写配置，不会在配置阶段调用网络。
 
 看板无审批功能。只有完整完成的任务显示“成品链接”和“复制到地址”。复制必须由用户在弹窗输入地址并按提交，禁止双引号、移动、删除和覆盖。

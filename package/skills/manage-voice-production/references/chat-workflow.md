@@ -73,7 +73,15 @@ py -3 scripts/manage_chat_workflow.py --project-root <项目> ack-feedback `
 
 ## 反馈
 
-提示词、生成、监控、拉回都把阶段结果反馈给 `理解文本与任务`，同时按流程向下游派发。`记录` 是单向阶段，只写项目 `04_管理与记录\03_问题与改进` 和逐句改动记录，不向其他Chat反馈。
+提示词、生成、监控、拉回都把阶段结果反馈给 `理解文本与任务`，同时按流程向下游派发。
+
+`记录` 是不可变的单向终止阶段：
+
+- 只写项目 `04_管理与记录\03_问题与改进` 和逐句改动记录。
+- 禁止调用 `prepare-handoff`，禁止使用任务消息工具向主线程或任何其他Chat发送汇报。
+- 完成时只携带当前 `lease_id` 运行 `complete`；返回的 `feedback_contract` 固定为 `null`。
+- 主对话看到 `one_way_terminal=true` 后不得等待记录反馈，派发完成即结束本轮。
+- `bootstrap-status` 会检查 `feedback_required=false`、`feedback_to=null`、`next_chat=null` 和全局 `record_is_one_way=true`；任一项被误改都会阻止启动。
 
 本轮由 `理解文本与任务` 汇总并结束。记录Chat写入完成后只把自己的status恢复为0。
 

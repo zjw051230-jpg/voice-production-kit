@@ -87,3 +87,10 @@
 - 目标忙碌时把5分钟单次 `retry_contract` 写入 `pending_retries`，合同包含原始交接参数；到点只能重试同一任务，仍忙继续循环。
 - API余额不足触发全局中断时，活动租约会进入 `last_interrupted_task`，并清除所有 `active_task` 和等待状态，避免恢复后永久忙碌。
 - 完整离线回归通过，`single_task_lease=OK`、`owner_waits_for_feedback=OK`，未调用网络。
+
+## v2.1 问题5：记录Chat单向终止
+
+- `记录` 固定为 `feedback_required=false`、`feedback_to=null`、`next_chat=null`；误改任一项都会被启动门禁拒绝。
+- 记录Chat禁止调用 `prepare-handoff`，不能向主线程或任何其他Chat发送汇报。
+- 记录完成只关闭自己的任务租约，`feedback_contract=null`；主对话收到 `one_way_terminal=true` 后不进入等待。
+- 主对话和记录Chat的角色提示词均明确该例外，完整离线回归通过，`record_one_way_terminal=OK`。
