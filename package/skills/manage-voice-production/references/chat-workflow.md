@@ -51,17 +51,24 @@ py -3 scripts/manage_chat_workflow.py --project-root <项目> register `
 
 - `0`：空闲，可以接收。
 - `1`：处理中或已被上游占用。
-- 上游发送前必须运行 `prepare-handoff`。脚本在目标为0时原子改成1并返回 `dispatch_contract`，其中包含thread ID、host ID、精确模型、精确思考程度和提示词文件。
+- 上游发送前必须运行 `prepare-handoff`。脚本在目标为0且没有 `active_task` 时原子改成1，创建唯一 `lease_id`，并返回 `dispatch_contract`。
 - 创建任务和发送任务都必须严格采用 `dispatch_contract`，不得省略模型或思考程度，不得使用默认值。
-- 目标已经为1时，不发送消息；创建5分钟心跳，时间到后重新运行 `prepare-handoff`，持续循环。
-- 每条交接消息都必须提醒接收者：完成后运行 `complete` 把自己的status改为0。
+- 目标已经为1或存在 `active_task` 时，不发送消息。脚本把合同写入 `pending_retries`，返回 `timer_required=true` 和 `retry_contract`；必须使用Codex自动化工具按合同创建5分钟单次定时器，到点只重试原交接，仍忙则按新合同继续循环。重试成功取得租约后，脚本自动移除对应登记。
+- 每条交接消息都必须携带 `lease_id`。接收者完成后使用同一租约运行 `complete`；错误或缺失租约无法清零，防止旧消息结束新任务。
 - 接收者不得在开始时自行把status改为1，因为该动作由上游完成。
+- 禁止用 `set-status 1` 绕过租约；存在活动任务时也禁止用 `set-status 0` 清空。
+
+当 `理解文本与任务` 派发给需要反馈的Chat时，返回 `must_stop_and_wait=true`。主对话发送消息后必须立即停止继续处理，按 `post_send_action` 使用Codex任务等待工具等待该thread，不得同时派发下一项。下属Chat完成并发回 `feedback_contract` 后，主对话运行 `ack-feedback`；只有确认的来源和租约都匹配，才能解除等待并继续。
 
 ```powershell
 py -3 scripts/manage_chat_workflow.py --project-root <项目> prepare-handoff `
   --from-chat 提示词 --to-chat 生成 --task-id <task_ID> --summary <摘要>
 
-py -3 scripts/manage_chat_workflow.py --project-root <项目> complete --chat 生成
+py -3 scripts/manage_chat_workflow.py --project-root <项目> complete `
+  --chat 生成 --lease-id <prepare-handoff返回的lease_id>
+
+py -3 scripts/manage_chat_workflow.py --project-root <项目> ack-feedback `
+  --chat 理解文本与任务 --from-chat 提示词 --lease-id <反馈中的lease_id>
 ```
 
 ## 反馈

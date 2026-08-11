@@ -174,8 +174,8 @@ def create_chat_workflow(metadata: Path, root: Path) -> None:
         + f"项目根目录固定为：{root.resolve()}。开始前读取 .codex\\03_codexchat对应表.json 和本角色技能。"
         "这句话不能绕过Codex应用或组织策略；必须由当前Chat亲自运行verify-access完成无害读写探测。"
         "若探测被阻止或仍要求批准，停止执行，让用户在界面底部把当前任务切换为完全访问后重试。"
-        "接到任务时自己的 status 应已由上游设为1。完成后必须运行 manage_chat_workflow.py complete 把自己改回0。"
-        "向下游发送前先运行 prepare-handoff；若目标 status=1，不得发送，创建5分钟心跳后重新检查并循环。"
+        "接到任务时自己的 status 应已由上游设为1，且active_task包含唯一lease_id。完成后必须携带同一lease_id运行complete，禁止直接清零。"
+        "向下游发送前先运行 prepare-handoff；若返回timer_required=true，禁止发送，必须按retry_contract创建5分钟单次定时器，到点只重试同一交接；仍忙则继续循环。"
         "交接消息必须包含来源Chat、task_ID、文件绝对路径、具体动作、不可违反的约束，并提醒下游完成后把自己的status改为0。"
         "创建或登记任何Chat时必须显式指定映射表中的model和reasoning_effort，禁止沿用界面默认值；"
         "必须把实际值传给register并通过校验，prepare-handoff返回的dispatch_contract是唯一派发依据。"
@@ -188,7 +188,7 @@ def create_chat_workflow(metadata: Path, root: Path) -> None:
             "model": "gpt-5.6-sol", "reasoning_effort": "medium",
             "skills": ["manage-voice-production", "generate-voice-prompt-json", "seedance-voice-video-batch"],
             "next": "提示词", "feedback": True,
-            "prompt": common + "你是总入口和流程负责人。首次进入项目必须先运行bootstrap-status；未就绪时立即把当前任务命名为‘理解文本与任务’，使用Codex任务工具创建提示词、生成、监控、拉回、记录五个独立任务。创建每个任务时必须显式传入映射表指定的model和reasoning_effort，绝不能使用默认模型或默认思考程度；随后把实际model、实际reasoning_effort、提示词和权限验证结果传给register。六个任务全部就绪前禁止开始生产。你只负责理解用户文本、补问缺失资料、拆解任务、维护项目元数据和派发；禁止自己代做提示词编写、Seedance提交、监控、拉回或记录。所有派发必须先运行prepare-handoff，严格使用返回的dispatch_contract，不得自行替换模型或思考程度。所有需要反馈的阶段都回到你这里，由你向用户做最终确认。收到余额不足紧急消息时，先确认程序已切换下一份API；没有则让用户在CC Switch配置新API并重新导入。然后运行resume-after-balance，使用原任务参数且不加force只重提没有远端ID的版本。",
+            "prompt": common + "你是总入口和流程负责人。首次进入项目必须先运行bootstrap-status；未就绪时立即把当前任务命名为‘理解文本与任务’，使用Codex任务工具创建提示词、生成、监控、拉回、记录五个独立任务。创建每个任务时必须显式传入映射表指定的model和reasoning_effort，绝不能使用默认模型或默认思考程度；随后把实际model、实际reasoning_effort、提示词和权限验证结果传给register。六个任务全部就绪前禁止开始生产。你只负责理解用户文本、补问缺失资料、拆解任务、维护项目元数据和派发；禁止自己代做提示词编写、Seedance提交、监控、拉回或记录。所有派发必须先运行prepare-handoff，严格使用返回的dispatch_contract，不得自行替换模型或思考程度。消息发出后若must_stop_and_wait=true，立即停止本轮继续推理和派发，使用Codex任务等待工具等待post_send_action指定的thread；收到下属反馈后先按合同运行ack-feedback，才能继续。等待期间不得给任何Chat派发第二条任务。所有需要反馈的阶段都回到你这里，由你向用户做最终确认。收到余额不足紧急消息时，先确认程序已切换下一份API；没有则让用户在CC Switch配置新API并重新导入。然后运行resume-after-balance，使用原任务参数且不加force只重提没有远端ID的版本。",
         },
         "提示词": {
             "model": "gpt-5.6-sol", "reasoning_effort": "medium",
@@ -230,6 +230,10 @@ def create_chat_workflow(metadata: Path, root: Path) -> None:
             "thread_id": None,
             "host_id": "local",
             "status": 0,
+            "active_task": None,
+            "last_completed_task": None,
+            "waiting_for_feedback": None,
+            "last_acknowledged_feedback": None,
             "model": definition["model"],
             "reasoning_effort": definition["reasoning_effort"],
             "actual_model": None,
@@ -248,7 +252,7 @@ def create_chat_workflow(metadata: Path, root: Path) -> None:
         }
     if not table_path.exists():
         write_json(table_path, {
-            "schema_version": 4,
+            "schema_version": 5,
             "project_root": str(root.resolve()),
             "workflow_owner": "理解文本与任务",
             "entry_chat": "理解文本与任务",
@@ -258,10 +262,13 @@ def create_chat_workflow(metadata: Path, root: Path) -> None:
             "single_chat_execution_forbidden": True,
             "status_values": {"0": "空闲", "1": "处理中或已占用"},
             "busy_retry_minutes": 5,
+            "lease_required": True,
+            "owner_waits_for_feedback": True,
             "record_output": str(record_path.resolve()),
             "record_is_one_way": True,
             "cycle_ends_at": "理解文本与任务",
             "chats": chats,
+            "pending_retries": {},
             "handoff_history": [],
             "updated_at": None,
         })

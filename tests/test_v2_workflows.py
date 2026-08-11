@@ -88,6 +88,19 @@ def test_api_gui_and_failover(root: Path) -> dict:
     window.destroy()
 
     save_manual_keys(project, "test", [key_b, key_d], None)
+    chat_path = pool_paths(project)["chats"]
+    leased_chats = read_json(chat_path)
+    leased_chats["chats"]["生成"].update({
+        "status": 1,
+        "active_task": {
+            "lease_id": "balance-test-lease", "task_ID": "fixture-task",
+            "summary": "余额中断租约", "from_chat": "理解文本与任务",
+        },
+    })
+    leased_chats["chats"]["理解文本与任务"]["waiting_for_feedback"] = {
+        "from_chat": "生成", "lease_id": "balance-test-lease",
+    }
+    chat_path.write_text(json.dumps(leased_chats, ensure_ascii=False, indent=2), encoding="utf-8")
     first_event = signal_balance_exhausted(project, "生成", ["fixture-task"], "余额不足")
     assert first_event["next_config_id"]
     state = read_json(pool_paths(project)["state"])
@@ -95,6 +108,9 @@ def test_api_gui_and_failover(root: Path) -> dict:
     assert state["workflow_paused"] is True
     assert chats["chats"]["理解文本与任务"]["status"] == 1
     assert all(chat["status"] == 0 for name, chat in chats["chats"].items() if name != "理解文本与任务")
+    assert all(chat.get("active_task") is None for chat in chats["chats"].values())
+    assert all(chat.get("waiting_for_feedback") is None for chat in chats["chats"].values())
+    assert chats["chats"]["生成"]["last_interrupted_task"]["lease_id"] == "balance-test-lease"
     second_event = signal_balance_exhausted(project, "生成", ["fixture-task"], "insufficient balance")
     assert second_event["next_config_id"] is None
     save_manual_keys(project, "test", [key_b, key_d, key_e], None)
@@ -291,14 +307,64 @@ def test_chat_workflow(root: Path) -> dict:
 
     ready = run("prepare-handoff", "--from-chat", "理解文本与任务", "--to-chat", "提示词", "--task-id", "T001", "--summary", "测试交接")
     assert ready["ready"] is True and ready["thread_id"] == "thread-prompt"
+    lease_id = ready["active_task"]["lease_id"]
     assert ready["dispatch_contract"] == {
         "thread_id": "thread-prompt", "host_id": "local",
         "model": "gpt-5.6-sol", "reasoning_effort": "medium",
         "prompt_file": ready["prompt_file"], "defaults_forbidden": True,
+        "lease_id": lease_id,
     }
-    busy = run("prepare-handoff", "--from-chat", "理解文本与任务", "--to-chat", "提示词", "--summary", "重复交接", expected=2)
+    assert ready["must_stop_and_wait"] is True
+    table = run("show")
+    assert table["chats"]["提示词"]["active_task"]["lease_id"] == lease_id
+    assert table["chats"]["理解文本与任务"]["waiting_for_feedback"]["lease_id"] == lease_id
+
+    source_waiting = run(
+        "prepare-handoff", "--from-chat", "理解文本与任务", "--to-chat", "生成",
+        "--task-id", "T002", "--summary", "主对话等待时禁止派发", expected=2,
+    )
+    assert source_waiting["source_waiting"] is True
+
+    busy = run(
+        "prepare-handoff", "--from-chat", "生成", "--to-chat", "提示词",
+        "--task-id", "T003", "--summary", "目标忙碌定时重试", expected=2,
+    )
     assert busy["ready"] is False and busy["retry_minutes"] == 5
-    assert run("complete", "--chat", "提示词")["status"] == 0
+    assert busy["timer_required"] is True
+    assert busy["retry_contract"]["schedule"]["kind"] == "once"
+    assert busy["retry_contract"]["arguments"]["task_ID"] == "T003"
+    assert busy["retry_contract"]["automation_id"].startswith("voice-chat-retry-2-")
+    assert len(busy["retry_contract"]["dedupe_key"]) == 12
+    assert busy["active_task"]["lease_id"] == lease_id
+    busy_table = run("show")
+    assert busy["retry_contract"]["automation_id"] in busy_table["pending_retries"]
+
+    manual_clear = subprocess.run(
+        [sys.executable, str(script), "--project-root", str(project),
+         "set-status", "--chat", "提示词", "--status", "0"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", env=env,
+    )
+    assert manual_clear.returncode != 0 and "活动任务" in manual_clear.stderr
+    wrong_lease = subprocess.run(
+        [sys.executable, str(script), "--project-root", str(project),
+         "complete", "--chat", "提示词", "--lease-id", "wrong-lease"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", env=env,
+    )
+    assert wrong_lease.returncode != 0 and "lease-id不匹配" in wrong_lease.stderr
+
+    completed = run("complete", "--chat", "提示词", "--lease-id", lease_id)
+    assert completed["status"] == 0
+    assert completed["feedback_contract"]["acknowledgement_required"] is True
+    still_waiting = run(
+        "prepare-handoff", "--from-chat", "理解文本与任务", "--to-chat", "生成",
+        "--task-id", "T002", "--summary", "反馈未确认仍禁止派发", expected=2,
+    )
+    assert still_waiting["source_waiting"] is True
+    acknowledged = run(
+        "ack-feedback", "--chat", "理解文本与任务", "--from-chat", "提示词",
+        "--lease-id", lease_id,
+    )
+    assert acknowledged["resumed"] is True and acknowledged["waiting_for_feedback"] is None
 
     state_path = project / ".codex" / "04_API池状态.json"
     state = read_json(state_path)
@@ -308,7 +374,11 @@ def test_chat_workflow(root: Path) -> dict:
     assert blocked["paused"] is True and blocked["required_target"] == "理解文本与任务"
     emergency = run("prepare-handoff", "--from-chat", "生成", "--to-chat", "理解文本与任务", "--summary", "余额不足")
     assert emergency["emergency"] is True and emergency["thread_id"] == "thread-owner"
-    return {"chat_workflow": "OK", "bootstrap_gate": "OK", "model_contract": "OK", "full_access_probe": "OK", "busy_retry_minutes": 5, "pause_gate": "OK"}
+    return {
+        "chat_workflow": "OK", "bootstrap_gate": "OK", "model_contract": "OK",
+        "full_access_probe": "OK", "single_task_lease": "OK",
+        "owner_waits_for_feedback": "OK", "busy_retry_minutes": 5, "pause_gate": "OK",
+    }
 
 
 def test_prompt_manifest_and_provenance(root: Path) -> dict:

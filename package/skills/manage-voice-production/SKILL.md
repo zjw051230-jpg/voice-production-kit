@@ -19,6 +19,8 @@ py -3 scripts/manage_chat_workflow.py --project-root <项目> bootstrap-status
 
 入口只负责理解、补问、拆解、维护索引、派发和汇总，禁止代做提示词、生成、监控、拉回或记录。所有业务阶段必须先执行 `prepare-handoff`，再严格按返回的 `dispatch_contract` 中的 thread ID、模型、思考程度和提示词文件创建或发送任务；不得自行采用默认值。未通过门禁时脚本会拒绝交接。
 
+每次成功交接都会生成唯一 `lease_id` 并写入目标Chat的 `active_task`。完成必须携带同一租约运行 `complete`，不得直接修改status。目标忙碌时按 `retry_contract` 创建5分钟单次定时器后停止本次发送，到点只重试原交接。主对话收到 `must_stop_and_wait=true` 后必须立即停止继续处理，使用Codex任务等待工具等待指定thread；收到反馈并运行 `ack-feedback` 前不得派发下一条。
+
 ## 新手创建项目
 
 用户只说“创建一个项目”时，不要直接猜测。按 [references/new-user-intake.md](references/new-user-intake.md) 分两轮询问：先取得工作区和项目名并创建骨架，再收集剧本、台词来源、角色素材、选用版本、API 配置状态、默认生成要求和本地交付位置。不得要求用户在聊天中发送 API Key。

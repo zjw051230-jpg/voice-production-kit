@@ -100,6 +100,8 @@ def main() -> int:
     expected_chats = {"理解文本与任务", "提示词", "生成", "监控", "拉回", "记录"}
     if set(chat_table.get("chats", {})) != expected_chats:
         fail("codexchat对应表缺少固定的六个Chat")
+    if not isinstance(chat_table.get("pending_retries"), dict):
+        fail("codexchat对应表缺少定时重试登记表")
     for name, chat in chat_table["chats"].items():
         if chat.get("status") not in (0, 1):
             fail(f"Chat status必须是0或1：{name}")
@@ -111,6 +113,11 @@ def main() -> int:
             fail(f"Chat缺少固定完全访问初始化消息：{name}")
         if "verify-access" not in chat.get("prompt", ""):
             fail(f"Chat缺少实际权限探测要求：{name}")
+        for field in ("active_task", "waiting_for_feedback"):
+            if field not in chat:
+                fail(f"Chat缺少租约或等待字段：{name}/{field}")
+        if "lease_id" not in chat.get("prompt", ""):
+            fail(f"Chat缺少任务租约要求：{name}")
         if "04_API池状态.json" not in chat.get("prompt", ""):
             fail(f"Chat缺少API余额暂停协议：{name}")
     api_state_path = metadata / "04_API池状态.json"

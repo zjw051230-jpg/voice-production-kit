@@ -78,3 +78,12 @@
 - 取消通过 `register --full-access-verified true` 自报权限；没有成功探测的 Chat 无法通过启动门禁。
 - 探测临时文件会在命令结束前删除；六个 Chat 全部探测后完整离线回归通过，`full_access_probe=OK`。
 - 手册明确说明聊天文字不能绕过应用、Windows或组织策略；反复要求批准时应在任务界面切换完全访问后重试。
+
+## v2.1 问题4：单任务租约、等待反馈与定时重试
+
+- `prepare-handoff` 为目标Chat创建唯一 `lease_id` 和 `active_task`；同一Chat存在活动任务时拒绝第二条交接。
+- 缺失或错误租约不能运行 `complete`，活动任务也不能用 `set-status 0` 绕过清理。
+- 主对话派发后写入 `waiting_for_feedback` 并返回 `must_stop_and_wait=true`；反馈未完成且未运行 `ack-feedback` 前拒绝继续派发。
+- 目标忙碌时把5分钟单次 `retry_contract` 写入 `pending_retries`，合同包含原始交接参数；到点只能重试同一任务，仍忙继续循环。
+- API余额不足触发全局中断时，活动租约会进入 `last_interrupted_task`，并清除所有 `active_task` 和等待状态，避免恢复后永久忙碌。
+- 完整离线回归通过，`single_task_lease=OK`、`owner_waits_for_feedback=OK`，未调用网络。
