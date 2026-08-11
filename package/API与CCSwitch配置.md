@@ -45,7 +45,7 @@ py -3 scripts\manage_api_pool.py --project-root <项目根目录> resume-after-b
 
 再使用原任务参数重新提交，不加 `--force-regenerate`。已有远端ID的版本不得重复提交。
 
-## CC Switch：只映射 `5.5 -> dpskv4`
+## CC Switch：只映射 `5.5 -> deepseek-v4-pro`
 
 安装包包含 CC Switch 3.18.0，安装后位于 `%LOCALAPPDATA%\Programs\CC Switch\cc-switch.exe`。用户数据库位于 `%USERPROFILE%\.cc-switch\cc-switch.db`，不会被安装包携带或覆盖。
 
@@ -57,20 +57,20 @@ py -3 scripts\manage_api_pool.py --project-root <项目根目录> resume-after-b
 4. 把下面整段话发给 Codex：
 
 ```text
-我已经在 CC Switch 中完成 Codex provider 和 API 配置，并已完全退出 CC Switch。请读取当前 v2.1 安装包中的“API与CCSwitch配置.md”，使用 scripts\configure_ccswitch_model.py 处理当前 Codex provider。只允许新增或修改显示名严格等于“5.5”的这一条映射，使它实际请求“dpskv4”；绝对禁止修改、重命名、删除或映射任何其他模型，也不得修改 API Key、base_url、provider ID 或其他数据库表。先执行 dry-run，只有预览明确显示“5.5 -> dpskv4”且显示其他模型未改变时，才自动备份数据库并执行修改；随后运行数据库完整性检查，报告 provider 名称和 ID、备份路径、映射结果与检查结果。完成后停止，不做其他操作。
+我已经在 CC Switch 中完成 Codex provider 和 API 配置，并已完全退出 CC Switch。请读取当前 v2.1 安装包中的“API与CCSwitch配置.md”，使用 scripts\configure_ccswitch_model.py 处理当前 Codex provider。只允许新增或修改显示名严格等于“5.5”的这一条映射，使它实际请求“deepseek-v4-pro”；绝对禁止修改、重命名、删除或映射任何其他模型，也不得修改 API Key、base_url、provider ID 或其他数据库表。先执行 dry-run，只有预览明确显示“5.5 -> deepseek-v4-pro”且显示其他模型未改变时，才自动备份数据库、模型目录和实时配置并执行修改；随后运行数据库完整性检查，报告 provider 名称和 ID、三份备份路径、映射结果与检查结果。完成后停止，不做其他操作。
 ```
 
 5. Codex 完成并报告后，关闭 Codex。
 6. 重新启动 CC Switch，重新选择或应用刚才的 provider。
 7. 重新启动 Codex，在模型列表选择显示名 `5.5`，发送一条无敏感信息的测试消息。
-8. 在 CC Switch 请求日志中确认实际请求模型为 `dpskv4`。
+8. 在 CC Switch 请求日志中确认显示模型为 `gpt-5.5`、实际请求模型为 `deepseek-v4-pro`。
 
 ### Codex 执行规则
 
 脚本已锁死，只能处理：
 
 ```json
-{"model": "dpskv4", "displayName": "5.5"}
+{"slug": "deepseek-v4-pro", "display_name": "gpt-5.5"}
 ```
 
 先预览：
@@ -88,13 +88,15 @@ py -3 .\scripts\configure_ccswitch_model.py --provider-id <准确的Provider_ID>
 预览必须同时出现：
 
 ```text
-preview: 5.5 -> dpskv4
+preview: 5.5 -> deepseek-v4-pro
 scope: only displayName=5.5; other models unchanged
 ```
 
-然后去掉 `--dry-run` 执行。脚本先把数据库备份到 `%USERPROFILE%\.cc-switch\backups`，只更新选定 Codex provider 的 `settings_config`，并执行 `PRAGMA integrity_check`。
+然后去掉 `--dry-run` 执行。脚本先把数据库、`cc-switch-model-catalog.json` 和实时 `config.toml` 分别备份到 `%USERPROFILE%\.cc-switch\backups`。它只在选定 provider 的 `settings_config.config` 中增加或修正一行 `model_catalog_json = "cc-switch-model-catalog.json"`，并只把目录中 `gpt-5.5` 条目的 `slug` 设为 `deepseek-v4-pro`。脚本逐字检查其他配置和其他模型未改变，再执行 `PRAGMA integrity_check`。
 
-严禁把 `5.6`、`5.6-sol`、`5.6-terra`、`5.6-luna` 或任何其他模型映射到 `dpskv4`。严禁使用批量替换，严禁修改其他 provider、API Key、base URL 或数据库表。
+旧版脚本把 `modelCatalog` 写在 `settings_config` 顶层。CC Switch 3.18 再次保存 provider 时会丢弃这个非持久字段，表现为“曾经生效，后来失效”。新版改用 CC Switch 实际应用的 `config` TOML 引用，因此切换或重启后仍保留。
+
+严禁把 `5.6`、`5.6-sol`、`5.6-terra`、`5.6-luna` 或任何其他模型映射到 `deepseek-v4-pro`。严禁使用批量替换，严禁修改其他 provider、API Key、base URL 或数据库表。CC Switch 仍在运行时脚本必须拒绝写入，防止托盘进程用内存旧值覆盖数据库。
 
 ### 回滚
 

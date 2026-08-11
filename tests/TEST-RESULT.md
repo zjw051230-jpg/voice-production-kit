@@ -44,7 +44,8 @@
 
 - 程序本体产品版本为 3.18.0，安装包不包含用户数据库。
 - 假数据库 dry-run 不写入；正式执行前自动备份，执行后 `PRAGMA integrity_check` 为 `ok`。
-- 只有显示名严格等于 `5.5` 的模型改为 `dpskv4`；`5.6-sol`、其他模型、其他 provider、API Key、base URL 和附加字段全部保持不变。
+- 只有显示名严格等于 `5.5` 的模型改为 `deepseek-v4-pro`；`5.6-sol`、其他模型、其他 provider、API Key、base URL 和附加字段全部保持不变。
+- 映射通过 provider `config` 中的 `model_catalog_json` 引用持久化；数据库、目录文件和实时 `config.toml` 分别备份并校验。
 
 ## 文档与发布清洁
 

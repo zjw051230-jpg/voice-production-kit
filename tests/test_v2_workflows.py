@@ -132,17 +132,26 @@ def test_ccswitch_mapping(root: Path) -> dict:
     fixture = root / "ccswitch"
     fixture.mkdir()
     db = fixture / "cc-switch.db"
+    original_config = (
+        'model_provider = "custom"\nmodel = "gpt-5.6-sol"\n\n'
+        '[model_providers.custom]\nname = "custom"\nbase_url = "https://example.invalid/v1"\n'
+    )
     original = {
         "auth": {"OPENAI_API_KEY": "fixture-only-secret"},
-        "base_url": "https://example.invalid/v1",
-        "modelCatalog": {"models": [
-            {"model": "old-upstream", "displayName": "5.5", "extra": "keep"},
-            {"model": "gpt-5.6-sol", "displayName": "5.6-sol"},
-            {"model": "other-model", "displayName": "其他"},
-        ]},
+        "config": original_config,
         "unrelated": {"keep": True},
     }
-    other = {"modelCatalog": {"models": [{"model": "unchanged", "displayName": "5.5"}]}}
+    other = {"config": 'model = "unchanged"\n', "unrelated": {"keep": "other"}}
+    catalog = fixture / "cc-switch-model-catalog.json"
+    original_catalog = {"models": [
+        {"slug": "old-upstream", "display_name": "gpt-5.5", "extra": "keep"},
+        {"slug": "gpt-5.6-sol", "display_name": "gpt-5.6-sol"},
+        {"slug": "other-model", "display_name": "其他"},
+    ]}
+    catalog.write_text(json.dumps(original_catalog, ensure_ascii=False), encoding="utf-8")
+    live_config = fixture / "config.toml"
+    live_original = original_config + '\n[desktop]\nfollowUpQueueMode = "queue"\n'
+    live_config.write_text(live_original, encoding="utf-8")
     with sqlite3.connect(db) as connection:
         connection.execute("CREATE TABLE providers (id TEXT PRIMARY KEY, name TEXT, settings_config TEXT, app_type TEXT, is_current INTEGER)")
         connection.execute("INSERT INTO providers VALUES (?,?,?,?,?)", ("p1", "Current", json.dumps(original), "codex", 1))
@@ -152,15 +161,17 @@ def test_ccswitch_mapping(root: Path) -> dict:
     script = PACKAGE / "scripts" / "configure_ccswitch_model.py"
     child_env = dict(os.environ, PYTHONIOENCODING="utf-8")
     dry = subprocess.run(
-        [sys.executable, str(script), "--db", str(db), "--dry-run"],
+        [sys.executable, str(script), "--db", str(db), "--catalog", str(catalog),
+         "--live-config", str(live_config), "--dry-run"],
         capture_output=True, text=True, encoding="utf-8", errors="replace", env=child_env,
     )
-    assert dry.returncode == 0 and "preview: 5.5 -> dpskv4" in dry.stdout
+    assert dry.returncode == 0 and "preview: 5.5 -> deepseek-v4-pro" in dry.stdout
     with sqlite3.connect(db) as connection:
         assert json.loads(connection.execute("SELECT settings_config FROM providers WHERE id='p1'").fetchone()[0]) == original
     connection.close()
     applied = subprocess.run(
-        [sys.executable, str(script), "--db", str(db)],
+        [sys.executable, str(script), "--db", str(db), "--catalog", str(catalog),
+         "--live-config", str(live_config)],
         capture_output=True, text=True, encoding="utf-8", errors="replace", env=child_env,
     )
     assert applied.returncode == 0 and "integrity_check: ok" in applied.stdout
@@ -169,12 +180,19 @@ def test_ccswitch_mapping(root: Path) -> dict:
         untouched = json.loads(connection.execute("SELECT settings_config FROM providers WHERE id='p2'").fetchone()[0])
         assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
     connection.close()
-    models = current["modelCatalog"]["models"]
-    assert next(item for item in models if item["displayName"] == "5.5")["model"] == "dpskv4"
-    assert [item for item in models if item["displayName"] != "5.5"] == [item for item in original["modelCatalog"]["models"] if item["displayName"] != "5.5"]
-    assert current["auth"] == original["auth"] and current["base_url"] == original["base_url"] and current["unrelated"] == original["unrelated"]
+    models = json.loads(catalog.read_text(encoding="utf-8"))["models"]
+    assert next(item for item in models if item["display_name"] == "gpt-5.5")["slug"] == "deepseek-v4-pro"
+    assert [item for item in models if item["display_name"] != "gpt-5.5"] == [item for item in original_catalog["models"] if item["display_name"] != "gpt-5.5"]
+    pointer = 'model_catalog_json = "cc-switch-model-catalog.json"'
+    assert current["config"].splitlines()[0] == pointer
+    assert "\n".join(current["config"].splitlines()[1:]) + "\n" == original_config
+    assert live_config.read_text(encoding="utf-8").splitlines()[0] == pointer
+    assert "\n".join(live_config.read_text(encoding="utf-8").splitlines()[1:]) + "\n" == live_original
+    assert current["auth"] == original["auth"] and current["unrelated"] == original["unrelated"]
     assert untouched == other
     assert list((fixture / "backups").glob("cc-switch.before-model-map.*.db"))
+    assert list((fixture / "backups").glob("cc-switch.before-model-map.*.catalog.json"))
+    assert list((fixture / "backups").glob("cc-switch.before-model-map.*.config.toml"))
     return {"ccswitch_mapping": "OK", "only_5_5_changed": True}
 
 
@@ -614,7 +632,7 @@ def test_documents() -> dict:
         text = path.read_text(encoding="utf-8-sig")
         assert "v2.1" in text and "v1.0.9" not in text
     combined = "\n".join(path.read_text(encoding="utf-8-sig") for path in docs.values())
-    for required in ("创建项目", "Seedance API配置工具", "立即写", "余额不足", "5.5", "dpskv4", "D:\\codex-board"):
+    for required in ("创建项目", "Seedance API配置工具", "立即写", "余额不足", "5.5", "deepseek-v4-pro", "D:\\codex-board"):
         assert required in combined, f"documentation missing: {required}"
     assert docs["manual"].read_bytes() == docs["published_manual"].read_bytes()
     assert docs["quick"].stat().st_size < docs["manual"].stat().st_size
