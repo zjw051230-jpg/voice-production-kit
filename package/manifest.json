@@ -1,0 +1,49 @@
+{
+  "name": "portable-voice-production",
+  "version": "2.0",
+  "released": "2026-08-06",
+  "previous_version": "1.0.9",
+  "changes": [
+    "Made API add, remove, and active-selection actions persist immediately instead of remaining in UI memory",
+    "Fixed the API tool action bar so save controls remain visible at supported window sizes",
+    "Installed the API configuration EXE and workspace locator inside every project's 04_管理与记录/01_API配置 directory",
+    "Added full package, documentation, GUI, API-pool, CC Switch, workflow, and clean-release validation for the 2.0 baseline",
+    "Bundled the complete CC Switch 3.18.0 Windows program with guarded local deployment",
+    "Locked CC Switch model mapping to the single exact route 5.5 -> dpskv4 and reject changes to other models",
+    "Added a copy-ready Codex instruction and a detailed end-to-end user manual",
+    "Added automatic test/production Seedance API import, multi-provider organization, hidden API-pool state, and balance-failover coordination",
+    "Added a native Seedance API configuration program with project selection, masked key entry, deduplication, and desktop shortcut",
+    "Added the complete local Seedance API configuration workflow and endpoint rules",
+    "Added a guarded CC Switch database mapper for display model 5.5 to upstream model dpskv4",
+    "Added backup, dry-run, integrity verification, request verification, and rollback instructions",
+    "Kept credentials, live databases, production media, servers, and D:\\codex-board outside the package"
+  ],
+  "platform": "Windows",
+  "skills": [
+    "manage-voice-production",
+    "seedance-voice-video-batch",
+    "generate-voice-prompt-json",
+    "generate-tts-emotion-prompt-json",
+    "repair-voice-generation",
+    "voice-production-dashboard",
+    "repair-voice-dashboard"
+  ],
+  "requirements": {
+    "python": "3.10+ for installation, Codex scripts, and guarded CC Switch mapping; desktop tools bundle their runtimes as EXE",
+    "ffmpeg": "required for video audio extraction",
+    "network": "required only for actual Seedance API operations"
+  },
+  "bundled_programs": {
+    "voice_dashboard": "program/配音任务看板.exe",
+    "seedance_api_config_tool": "program/Seedance API配置工具.exe",
+    "cc_switch": "program/cc-switch/cc-switch.exe",
+    "cc_switch_version": "3.18.0"
+  },
+  "excluded": [
+    "API keys and credentials",
+    "live CC Switch database and provider data",
+    "production media and task data",
+    "D:\\codex-board",
+    "network-share delivery"
+  ]
+}

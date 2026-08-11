@@ -1,0 +1,4 @@
+interface:
+  display_name: "TTS Emotion Prompt JSON"
+  short_description: "Create emotion-only Chinese TTS task JSON batches"
+  default_prompt: "Use $generate-tts-emotion-prompt-json to create one emotion-only TTS JSON batch from these dialogue lines."

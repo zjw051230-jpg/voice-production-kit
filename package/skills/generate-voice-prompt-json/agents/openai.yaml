@@ -1,0 +1,4 @@
+interface:
+  display_name: "剧情总览转高保真语音提示词"
+  short_description: "从剧情总览准确还原人物心理、音色与逐句表演的严格提示词 JSON"
+  default_prompt: "Use $generate-voice-prompt-json to convert a plot overview into accurate, psychologically grounded, high-fidelity voice prompts."

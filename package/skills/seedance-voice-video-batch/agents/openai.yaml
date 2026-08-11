@@ -1,0 +1,7 @@
+interface:
+  display_name: "Seedance 角色配音批量生产"
+  short_description: "批量并行生成四版角色配音视频，自动裁剪归档并记录返工反馈"
+  default_prompt: "使用 $seedance-voice-video-batch 处理所选配音项目中的待生成任务。"
+
+policy:
+  allow_implicit_invocation: true

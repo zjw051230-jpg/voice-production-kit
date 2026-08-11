@@ -1,0 +1,4 @@
+interface:
+  display_name: "配音问题修复"
+  short_description: "根据成品文件地址精准追溯原任务并生成四版修复配音成品"
+  default_prompt: "Use $repair-voice-generation to trace this voice file, revise its original prompt from my feedback, and generate four repaired versions."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "配音任务看板"
+  short_description: "安装和操作多项目原生配音任务看板并安全复制已完成成品"
+  default_prompt: "启动或维护原生Windows配音任务看板，显示全部任务状态，只允许已完成任务打开成品或通过确认弹窗复制到绝对地址。"

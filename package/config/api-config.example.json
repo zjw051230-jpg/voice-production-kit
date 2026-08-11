@@ -1,0 +1,5 @@
+{
+  "base_url": "https://chat.q1.com/v1",
+  "api_key": "请在具体项目的本机配置中填写，不要分享",
+  "model": "doubao-seedance-2.0"
+}

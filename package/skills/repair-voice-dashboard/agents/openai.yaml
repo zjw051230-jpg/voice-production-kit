@@ -1,0 +1,4 @@
+interface:
+  display_name: "修复配音看板"
+  short_description: "修复原生配音看板程序快捷方式路径权限和工作区映射问题"
+  default_prompt: "检查原生配音看板及多项目工作区，先诊断，再备份配置并修复EXE、快捷方式、路径、权限或失效映射，不修改媒体内容。"

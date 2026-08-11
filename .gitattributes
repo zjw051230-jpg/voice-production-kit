@@ -1,0 +1,11 @@
+*.exe binary
+*.pdf binary
+*.png binary
+*.jpg binary
+*.mp3 binary
+*.mp4 binary
+*.zip binary
+*.ps1 text eol=crlf
+*.py text eol=lf
+*.md text eol=lf
+*.json text eol=lf

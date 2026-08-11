@@ -1,0 +1,35 @@
+# Python and build outputs
+__pycache__/
+*.py[cod]
+build/
+dist/
+*.spec
+
+# Local runtime state and secrets
+.env
+.env.*
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+**/doubao_api_config.json
+**/api_pool/
+**/.codex/
+**/.codex-dashboard/
+**/.codex-tools/
+
+# Generated and local-only artifacts
+*.zip
+*.log
+*.tmp
+*.bak
+*.lnk
+.test-artifacts/
+test-workspace/
+
+# OS and editor files
+Thumbs.db
+.DS_Store
+.vscode/
+.idea/
