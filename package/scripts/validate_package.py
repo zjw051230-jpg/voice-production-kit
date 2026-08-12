@@ -10,6 +10,8 @@ from pathlib import Path
 
 REQUIRED_PACKAGE = (
     "START-HERE.md", "INSTALL.md", "manifest.json", "install.ps1",
+    "scripts/Resolve-Env4BC.ps1",
+    "scripts/Update-Toolkit.ps1",
     "program/配音任务看板.exe",
 )
 FORBIDDEN_NAMES = {
@@ -34,8 +36,8 @@ def validate_package(package: Path) -> tuple[list[str], dict]:
         manifest = json.loads((package / "manifest.json").read_text(encoding="utf-8-sig"))
     except (OSError, json.JSONDecodeError) as exc:
         return [f"invalid manifest: {exc}"], {}
-    if manifest.get("version") != "2.2":
-        errors.append("manifest version must be 2.2")
+    if manifest.get("version") != "3.0":
+        errors.append("manifest version must be 3.0")
     if manifest.get("environment_dependency") != "env4BC":
         errors.append("environment dependency must be env4BC")
     if set(manifest.get("bundled_programs", {})) != {"voice_dashboard"}:
@@ -43,6 +45,12 @@ def validate_package(package: Path) -> tuple[list[str], dict]:
     for skill in manifest.get("skills", []):
         if not (package / "skills" / skill / "SKILL.md").is_file():
             errors.append(f"missing skill: {skill}")
+    resolver = (package / "scripts/Resolve-Env4BC.ps1").read_text(encoding="utf-8-sig", errors="ignore")
+    updater = (package / "scripts/Update-Toolkit.ps1").read_text(encoding="utf-8-sig", errors="ignore")
+    if "zjw051230-jpg/env4BC" not in resolver or "SHA-256" not in resolver or "联系维护人员" not in resolver:
+        errors.append("env4BC trust/stop contract is incomplete")
+    if "zjw051230-jpg/voice-production-toolkit4bingchuan" not in updater or "SHA-256" not in updater or "-UpdateOnly" not in updater:
+        errors.append("GitHub update contract is incomplete")
 
     for path in package.rglob("*"):
         rel = path.relative_to(package)

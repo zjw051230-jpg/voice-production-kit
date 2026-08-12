@@ -1,8 +1,8 @@
 {
   "name": "portable-voice-production",
-  "version": "2.2",
+  "version": "3.0",
   "released": "2026-08-11",
-  "previous_version": "2.1",
+  "previous_version": "2.2",
   "changes": [
     "Separated CC Switch, Seedance API configuration tools, exact model routing, Python and ffmpeg environment management into env4BC",
     "Voice package now contains only voice workflow skills, project structure, generation operations and the voice task dashboard",
