@@ -5,6 +5,10 @@ description: Create, register, inspect, and maintain portable multi-project Chin
 
 # 配音项目管理
 
+## 处理工具更新请求
+
+用户说“更新配音工具”“配音工具需要更新”或同义请求时，不得对工作区执行 Git 同步。读取 `<WorkspaceRoot>\.voice-production-toolkit\update-source.json`，确认仓库严格等于 `https://github.com/zjw051230-jpg/voice-production-toolkit4bingchuan`，然后运行其中记录的本机 `Update-Toolkit.ps1`。更新只允许修改声明的工具白名单；禁止扫描、同步、移动、改名、覆盖或删除项目素材、成品、交付版本、API 私有配置、日志和隐藏 `.codex` 任务记录。只有隐藏更新记录不存在时才询问一次官方仓库链接；首次验证安装后不得再次要求链接。
+
 本技能是 Codex 操作入口。工作区下面直接放多个项目，例如 `工作区\项目1`、`工作区\项目2`。每个项目使用四个真实分类目录；隐藏的旧目录联接只用于兼容现有工具。
 
 ## 强制六Chat门禁
