@@ -1,9 +1,12 @@
 {
   "name": "portable-voice-production",
-  "version": "2.1",
+  "version": "2.2",
   "released": "2026-08-11",
-  "previous_version": "2.0",
+  "previous_version": "2.1",
   "changes": [
+    "Separated CC Switch, Seedance API configuration tools, exact model routing, Python and ffmpeg environment management into env4BC",
+    "Voice package now contains only voice workflow skills, project structure, generation operations and the voice task dashboard",
+    "All installs and updates repair missing declared tools only and never touch user materials, outputs, snapshots, logs or hidden task records",
     "Added exact gpt-5.5 -> deepseek-v4-pro routing inside the bundled CC Switch local proxy while preserving every other model and provider",
     "Allowed guarded SQLite transaction updates while CC Switch remains online so the active Codex conversation is not interrupted",
     "Grouped dashboard tasks into five user-facing stages with precise next actions, source metadata, timestamps, and missing-deliverable detection",
@@ -37,15 +40,12 @@
     "repair-voice-dashboard"
   ],
   "requirements": {
-    "python": "3.10+ for installation, Codex scripts, and guarded CC Switch mapping; desktop tools bundle their runtimes as EXE",
-    "ffmpeg": "required for video audio extraction",
+    "python": "3.10+ provided or verified by env4BC",
+    "ffmpeg": "provided or verified by env4BC for audio extraction",
     "network": "required only for actual Seedance API operations"
   },
   "bundled_programs": {
-    "voice_dashboard": "program/配音任务看板.exe",
-    "seedance_api_config_tool": "program/Seedance API配置工具.exe",
-    "cc_switch": "program/cc-switch/cc-switch.exe",
-    "cc_switch_version": "3.18.0 + exact-local-model-routes-v1"
+    "voice_dashboard": "program/配音任务看板.exe"
   },
   "excluded": [
     "API keys and credentials",
@@ -53,5 +53,6 @@
     "production media and task data",
     "D:\\codex-board",
     "network-share delivery"
-  ]
+  ],
+  "environment_dependency": "env4BC"
 }
