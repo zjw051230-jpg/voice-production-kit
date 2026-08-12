@@ -1,20 +1,31 @@
 {
   "name": "portable-voice-production",
-  "version": "2.0",
-  "released": "2026-08-06",
-  "previous_version": "1.0.9",
+  "version": "3.0",
+  "released": "2026-08-11",
+  "previous_version": "2.2",
   "changes": [
+    "Separated CC Switch, Seedance API configuration tools, exact model routing, Python and ffmpeg environment management into env4BC",
+    "Voice package now contains only voice workflow skills, project structure, generation operations and the voice task dashboard",
+    "All installs and updates repair missing declared tools only and never touch user materials, outputs, snapshots, logs or hidden task records",
+    "Added exact gpt-5.5 -> deepseek-v4-pro routing inside the bundled CC Switch local proxy while preserving every other model and provider",
+    "Allowed guarded SQLite transaction updates while CC Switch remains online so the active Codex conversation is not interrupted",
+    "Grouped dashboard tasks into five user-facing stages with precise next actions, source metadata, timestamps, and missing-deliverable detection",
+    "Expanded the v2.1 beginner manual with reading paths, terminology, six-Chat responsibilities, status tables, delivery checks, troubleshooting, FAQ, and reviewed references",
+    "Separated monitoring from pullback and gated all downloads on success plus failed equaling the full batch total",
+    "Updated the dashboard with terminal, success, failure, running, and downloaded counts plus partial-failure delivery",
+    "Added a mandatory six-Chat bootstrap gate that blocks production until every role has a unique thread ID and verified full access",
+    "Established synchronized installer and GitHub development workflows for v2.1",
     "Made API add, remove, and active-selection actions persist immediately instead of remaining in UI memory",
     "Fixed the API tool action bar so save controls remain visible at supported window sizes",
     "Installed the API configuration EXE and workspace locator inside every project's 04_管理与记录/01_API配置 directory",
     "Added full package, documentation, GUI, API-pool, CC Switch, workflow, and clean-release validation for the 2.0 baseline",
     "Bundled the complete CC Switch 3.18.0 Windows program with guarded local deployment",
-    "Locked CC Switch model mapping to the single exact route 5.5 -> dpskv4 and reject changes to other models",
+    "Locked CC Switch model mapping to the single exact route 5.5 -> deepseek-v4-pro and reject changes to other models",
     "Added a copy-ready Codex instruction and a detailed end-to-end user manual",
     "Added automatic test/production Seedance API import, multi-provider organization, hidden API-pool state, and balance-failover coordination",
     "Added a native Seedance API configuration program with project selection, masked key entry, deduplication, and desktop shortcut",
     "Added the complete local Seedance API configuration workflow and endpoint rules",
-    "Added a guarded CC Switch database mapper for display model 5.5 to upstream model dpskv4",
+    "Added a guarded CC Switch database configurator for provider.meta.localProxyRequestOverrides.modelRoutes without touching Codex model catalogs",
     "Added backup, dry-run, integrity verification, request verification, and rollback instructions",
     "Kept credentials, live databases, production media, servers, and D:\\codex-board outside the package"
   ],
@@ -29,15 +40,12 @@
     "repair-voice-dashboard"
   ],
   "requirements": {
-    "python": "3.10+ for installation, Codex scripts, and guarded CC Switch mapping; desktop tools bundle their runtimes as EXE",
-    "ffmpeg": "required for video audio extraction",
+    "python": "3.10+ provided or verified by env4BC",
+    "ffmpeg": "provided or verified by env4BC for audio extraction",
     "network": "required only for actual Seedance API operations"
   },
   "bundled_programs": {
-    "voice_dashboard": "program/配音任务看板.exe",
-    "seedance_api_config_tool": "program/Seedance API配置工具.exe",
-    "cc_switch": "program/cc-switch/cc-switch.exe",
-    "cc_switch_version": "3.18.0"
+    "voice_dashboard": "program/配音任务看板.exe"
   },
   "excluded": [
     "API keys and credentials",
@@ -45,5 +53,6 @@
     "production media and task data",
     "D:\\codex-board",
     "network-share delivery"
-  ]
+  ],
+  "environment_dependency": "env4BC"
 }

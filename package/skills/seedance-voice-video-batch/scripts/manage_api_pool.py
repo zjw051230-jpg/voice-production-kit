@@ -480,6 +480,15 @@ def signal_balance_exhausted(project: Path, source_chat: str, task_ids: list[str
     if paths["chats"].exists():
         chats = read_json(paths["chats"], {})
         for name, chat in chats.get("chats", {}).items():
+            active_task = chat.get("active_task")
+            if isinstance(active_task, dict):
+                chat["last_interrupted_task"] = {
+                    **active_task,
+                    "interrupted_at": now(),
+                    "interrupt_reason": "Seedance API 余额不足",
+                }
+            chat["active_task"] = None
+            chat["waiting_for_feedback"] = None
             chat["status"] = 1 if name == "理解文本与任务" else 0
         owner = chats.get("chats", {}).get("理解文本与任务", {})
         notify_thread_id = owner.get("thread_id")

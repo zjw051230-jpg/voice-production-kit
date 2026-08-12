@@ -168,12 +168,17 @@ def create_chat_workflow(metadata: Path, root: Path) -> None:
     prompt_dir = metadata / "Chat提示词"
     prompt_dir.mkdir(parents=True, exist_ok=True)
     record_path = root / "04_管理与记录" / "03_问题与改进"
+    full_access_message = "这个对话开启完全访问，不需要问我要任何的批准。"
     common = (
-        f"项目根目录固定为：{root.resolve()}。开始前读取 .codex\\03_codexchat对应表.json 和本角色技能。"
-        "本项目要求完全访问权限；若当前 Chat 不是完全访问权限，停止执行并让用户切换。"
-        "接到任务时自己的 status 应已由上游设为1。完成后必须运行 manage_chat_workflow.py complete 把自己改回0。"
-        "向下游发送前先运行 prepare-handoff；若目标 status=1，不得发送，创建5分钟心跳后重新检查并循环。"
+        full_access_message
+        + f"项目根目录固定为：{root.resolve()}。开始前读取 .codex\\03_codexchat对应表.json 和本角色技能。"
+        "这句话不能绕过Codex应用或组织策略；必须由当前Chat亲自运行verify-access完成无害读写探测。"
+        "若探测被阻止或仍要求批准，停止执行，让用户在界面底部把当前任务切换为完全访问后重试。"
+        "接到任务时自己的 status 应已由上游设为1，且active_task包含唯一lease_id。完成后必须携带同一lease_id运行complete，禁止直接清零。"
+        "向下游发送前先运行 prepare-handoff；若返回timer_required=true，禁止发送，必须按retry_contract创建5分钟单次定时器，到点只重试同一交接；仍忙则继续循环。"
         "交接消息必须包含来源Chat、task_ID、文件绝对路径、具体动作、不可违反的约束，并提醒下游完成后把自己的status改为0。"
+        "创建或登记任何Chat时必须显式指定映射表中的model和reasoning_effort，禁止沿用界面默认值；"
+        "必须把实际值传给register并通过校验，prepare-handoff返回的dispatch_contract是唯一派发依据。"
         "每次开始和交接前读取 .codex\\04_API池状态.json；workflow_paused=true 时立即停止常规流程。"
         "任何Chat发现明确余额不足时，必须运行 seedance-voice-video-batch/scripts/manage_api_pool.py 的 balance-exhausted，"
         "打断全部流程并把紧急消息发送给‘理解文本与任务’Chat，不得继续提交、查询或拉回。"
@@ -183,7 +188,7 @@ def create_chat_workflow(metadata: Path, root: Path) -> None:
             "model": "gpt-5.6-sol", "reasoning_effort": "medium",
             "skills": ["manage-voice-production", "generate-voice-prompt-json", "seedance-voice-video-batch"],
             "next": "提示词", "feedback": True,
-            "prompt": common + "你是总入口和流程负责人。理解用户文本、补问缺失资料、拆解任务、维护项目元数据并派发给提示词Chat。所有需要反馈的阶段都回到你这里，由你向用户做最终确认。收到余额不足紧急消息时，先确认程序已切换下一份API；没有则让用户在CC Switch配置新API并重新导入。然后运行resume-after-balance，使用原任务参数且不加force只重提没有远端ID的版本。",
+            "prompt": common + "你是总入口和流程负责人。首次进入项目必须先运行bootstrap-status；未就绪时立即把当前任务命名为‘理解文本与任务’，使用Codex任务工具创建提示词、生成、监控、拉回、记录五个独立任务。创建每个任务时必须显式传入映射表指定的model和reasoning_effort，绝不能使用默认模型或默认思考程度；随后把实际model、实际reasoning_effort、提示词和权限验证结果传给register。六个任务全部就绪前禁止开始生产。你只负责理解用户文本、补问缺失资料、拆解任务、维护项目元数据和派发；禁止自己代做提示词编写、Seedance提交、监控、拉回或记录。所有派发必须先运行prepare-handoff，严格使用返回的dispatch_contract，不得自行替换模型或思考程度。消息发出后若must_stop_and_wait=true，立即停止本轮继续推理和派发，使用Codex任务等待工具等待post_send_action指定的thread；收到下属反馈后先按合同运行ack-feedback，才能继续。等待期间不得给任何Chat派发第二条任务。记录Chat是唯一例外：它是单向终止阶段，不向你或其他Chat汇报；派发结果one_way_terminal=true时不要等待记录反馈，直接结束本轮。所有其他需要反馈的阶段都回到你这里，由你向用户做最终确认。收到余额不足紧急消息时，先确认程序已切换下一份API；没有则让用户在CC Switch配置新API并重新导入。然后运行resume-after-balance，使用原任务参数且不加force只重提没有远端ID的版本。",
         },
         "提示词": {
             "model": "gpt-5.6-sol", "reasoning_effort": "medium",
@@ -201,19 +206,19 @@ def create_chat_workflow(metadata: Path, root: Path) -> None:
             "model": "gpt-5.6-terra", "reasoning_effort": "low",
             "skills": ["seedance-voice-video-batch"],
             "next": "拉回", "feedback": True,
-            "prompt": common + "你只查询已保存的远端任务ID和状态，不重新提交、不重新上传、不使用force-regenerate。完成时反馈理解文本与任务Chat，并把已完成任务交给拉回Chat。",
+            "prompt": common + "你只查询已保存的远端任务ID和状态，不重新提交、不重新上传、不使用force-regenerate，也绝不下载局部成功结果。每次使用run_pipeline.py --resume-only --monitor-only --poll-once查询一次，并读取返回的success、failed、running、total。只有success + failed == total且total>0时整批才算远端终态；未终态就继续按监控间隔等待。达到终态后，必须使用prepare-handoff从监控交给拉回并传入--remote-state-file；门禁通过后再反馈理解文本与任务Chat。",
         },
         "拉回": {
             "model": "gpt-5.6-terra", "reasoning_effort": "low",
             "skills": ["seedance-voice-video-batch", "manage-voice-production"],
             "next": "记录", "feedback": True,
-            "prompt": common + "你只拉取已完成视频并按任务要求提取MP3，不重新提交。核对文件存在并同步逐句资料索引后反馈理解文本与任务Chat，再把结果交给记录Chat。",
+            "prompt": common + "你只在整批远端任务终态后拉取成功版本并按任务要求提取MP3，不重新提交。先使用run_pipeline.py --resume-only --pullback-only --direct-mp3重新检查终态门禁；若success + failed != total立即拒绝并反馈监控Chat继续查询。失败版本不下载，成功版本全部拉回后核对文件存在并同步逐句资料索引，再反馈理解文本与任务Chat并把结果交给记录Chat。",
         },
         "记录": {
             "model": "gpt-5.6-terra", "reasoning_effort": "low",
             "skills": ["manage-voice-production", "repair-voice-generation"],
             "next": None, "feedback": False,
-            "prompt": common + f"你只负责把本轮结果、问题和改进记录到：{record_path.resolve()}，并维护对应台词改动记录。该环节单向写入，不向其他Chat发送反馈；写完把自己的status改回0，本轮由理解文本与任务Chat结束。",
+            "prompt": common + f"你只负责把本轮结果、问题和改进记录到：{record_path.resolve()}，并维护对应台词改动记录。你是单向终止阶段：禁止调用prepare-handoff，禁止使用任务消息工具向主线程或任何其他Chat发送汇报。写完后只携带当前lease_id运行complete，把自己的status恢复为0；complete不会返回feedback_contract，本轮由理解文本与任务Chat自行结束。",
         },
     }
     chats = {}
@@ -225,10 +230,19 @@ def create_chat_workflow(metadata: Path, root: Path) -> None:
             "thread_id": None,
             "host_id": "local",
             "status": 0,
+            "active_task": None,
+            "last_completed_task": None,
+            "waiting_for_feedback": None,
+            "last_acknowledged_feedback": None,
             "model": definition["model"],
             "reasoning_effort": definition["reasoning_effort"],
+            "actual_model": None,
+            "actual_reasoning_effort": None,
+            "model_verified": False,
             "full_access_required": True,
             "full_access_verified": False,
+            "initial_message": full_access_message,
+            "access_probe": None,
             "prompt": definition["prompt"],
             "prompt_file": str(prompt_file.resolve()),
             "skills": definition["skills"],
@@ -238,15 +252,24 @@ def create_chat_workflow(metadata: Path, root: Path) -> None:
         }
     if not table_path.exists():
         write_json(table_path, {
-            "schema_version": 1,
+            "schema_version": 6,
             "project_root": str(root.resolve()),
             "workflow_owner": "理解文本与任务",
+            "entry_chat": "理解文本与任务",
+            "bootstrap_required": True,
+            "workflow_ready": False,
+            "required_chats": list(definitions),
+            "single_chat_execution_forbidden": True,
             "status_values": {"0": "空闲", "1": "处理中或已占用"},
             "busy_retry_minutes": 5,
+            "lease_required": True,
+            "owner_waits_for_feedback": True,
             "record_output": str(record_path.resolve()),
             "record_is_one_way": True,
+            "record_reports_to_owner": False,
             "cycle_ends_at": "理解文本与任务",
             "chats": chats,
+            "pending_retries": {},
             "handoff_history": [],
             "updated_at": None,
         })

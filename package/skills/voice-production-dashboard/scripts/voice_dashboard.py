@@ -32,11 +32,13 @@ GREEN = "#177454"
 RED = "#b33a32"
 AMBER = "#9a6300"
 TASK_FIELDS = {"剧本名字", "task_ID", "角色名字", "台词", "时长", "提示词"}
-REMOTE_FAILED = {"failed", "error", "cancelled", "canceled"}
+REMOTE_FAILED = {"failed", "error", "cancelled", "canceled", "submit_failed"}
 REMOTE_RUNNING = {"queued", "processing", "running", "in_progress"}
 REMOTE_SUBMITTED = {"pending", "submitted", "created"}
 REMOTE_READY = {"succeeded", "completed", "success", "done"}
+PULLBACK_FAILED = {"postprocess_failed", "download_blocked"}
 MEDIA_SUFFIXES = {".mp3", ".mp4", ".wav", ".m4a"}
+STAGE_ORDER = ["准备中", "生产中", "待拉回", "需处理", "已交付"]
 
 
 def app_dir() -> Path:
@@ -141,28 +143,102 @@ def files_exist(job: dict) -> bool:
     return bool(output and mp3 and Path(str(output)).is_file() and Path(str(mp3)).is_file())
 
 
-def derive_status(task: dict, jobs: list[dict], material: str) -> tuple[str, int, int, bool]:
+def job_summary(jobs: list[dict]) -> dict:
     total = len(jobs)
-    done = sum(1 for job in jobs if str(job.get("status", "")).lower() == "downloaded" and files_exist(job))
-    statuses = {str(job.get("status", "")).lower() for job in jobs}
-    complete = total > 0 and done == total
-    if statuses & REMOTE_FAILED:
-        return "失败", done, total, False
-    if material == "缺失":
-        return "素材缺失", done, total, False
-    if material in {"已有待选择", "待确认"}:
-        return "素材待选择", done, total, False
-    if complete:
-        return "已完成", done, total, True
-    if "downloaded" in statuses or statuses & REMOTE_READY:
-        return "可拉回", done, total, False
-    if statuses & REMOTE_RUNNING:
-        return "生成中", done, total, False
+    statuses = [str(job.get("status", "new")).strip().lower() for job in jobs]
+    success = sum(status in REMOTE_READY | {"downloaded"} | PULLBACK_FAILED for status in statuses)
+    failed = sum(status in REMOTE_FAILED for status in statuses)
+    downloaded = sum(status == "downloaded" and files_exist(job)
+                     for status, job in zip(statuses, jobs))
+    submitted = sum(status in REMOTE_SUBMITTED for status in statuses)
+    generating = sum(status in REMOTE_RUNNING for status in statuses)
+    missing_deliverables = sum(status == "downloaded" and not files_exist(job)
+                               for status, job in zip(statuses, jobs))
+    running = total - success - failed
+    terminal = total > 0 and success + failed == total
+    deliverables_ready = terminal and success > 0 and downloaded == success
+    return {
+        "total": total, "success": success, "failed": failed, "running": running,
+        "downloaded": downloaded, "terminal_count": success + failed,
+        "terminal": terminal, "deliverables_ready": deliverables_ready,
+        "pullback_failed": sum(status in PULLBACK_FAILED for status in statuses),
+        "submitted": submitted, "generating": generating,
+        "nonterminal": running, "missing_deliverables": missing_deliverables,
+        "local_failures": sum(status in PULLBACK_FAILED for status in statuses) + missing_deliverables,
+        "statuses": set(statuses),
+    }
+
+
+def derive_status(task: dict, jobs: list[dict], material: str) -> tuple[str, dict]:
+    summary = job_summary(jobs)
+    statuses = summary["statuses"]
+    if not jobs:
+        if material == "缺失":
+            return "素材缺失", summary
+        if material in {"已有待选择", "待确认"}:
+            return "素材待选择", summary
+        if material in {"", "未知", "未登记"}:
+            return "素材未登记", summary
+    if summary["running"] > 0:
+        if statuses & (REMOTE_RUNNING | REMOTE_READY | REMOTE_FAILED | PULLBACK_FAILED | {"downloaded"}):
+            return "生成中", summary
+        if statuses & REMOTE_SUBMITTED or any(job.get("api_id") for job in jobs):
+            return "已提交", summary
+    if summary["terminal"]:
+        if summary["pullback_failed"]:
+            return "拉回失败", summary
+        if summary["missing_deliverables"]:
+            return "成品缺失", summary
+        if summary["success"] == 0:
+            return "已结束（全部失败）", summary
+        if not summary["deliverables_ready"]:
+            return "可拉回", summary
+        if summary["failed"]:
+            return "已结束（含失败）", summary
+        return "已完成", summary
     if statuses & REMOTE_SUBMITTED or any(job.get("api_id") for job in jobs):
-        return "已提交", done, total, False
+        return "已提交", summary
     if str(task.get("提示词", "")).strip():
-        return "提示词就绪", 0, 0, False
-    return "待准备", 0, 0, False
+        return "提示词就绪", summary
+    return "待准备", summary
+
+
+def status_details(status: str, summary: dict, material: str) -> dict:
+    mapping = {
+        "素材未登记": ("准备中", "登记角色素材", True),
+        "素材缺失": ("准备中", "补充角色素材", True),
+        "素材待选择": ("准备中", "确认参考音色", True),
+        "待准备": ("准备中", "补齐台词与提示词", False),
+        "提示词就绪": ("准备中", "提交生成", False),
+        "已提交": ("生产中", "等待远端开始", False),
+        "生成中": ("生产中", "等待远端全部结束", False),
+        "可拉回": ("待拉回", "拉回全部成功版本", False),
+        "成品缺失": ("需处理", "检查或重新拉回成品", True),
+        "拉回失败": ("需处理", "重试拉回", True),
+        "已结束（全部失败）": ("需处理", "重做失败版本", True),
+        "已结束（含失败）": ("已交付", "检查失败版本或打开成品", True),
+        "已完成": ("已交付", "打开或复制成品", False),
+    }
+    stage, next_action, attention = mapping.get(status, ("需处理", "检查任务状态", True))
+    return {"stage": stage, "next_action": next_action, "requires_attention": attention}
+
+
+def latest_update(source: Path, jobs: list[dict]) -> str:
+    timestamps = []
+    try:
+        timestamps.append(source.stat().st_mtime)
+    except OSError:
+        pass
+    for job in jobs:
+        state_path = job.get("_state_path")
+        if state_path:
+            try:
+                timestamps.append(Path(str(state_path)).stat().st_mtime)
+            except OSError:
+                pass
+    if not timestamps:
+        return ""
+    return datetime.fromtimestamp(max(timestamps)).astimezone().strftime("%Y-%m-%d %H:%M")
 
 
 def scan_workspace(workspace: Path) -> list[dict]:
@@ -180,13 +256,21 @@ def scan_workspace(workspace: Path) -> list[dict]:
                 seen.add(task_id)
                 material = material_status(root, str(task.get("角色名字") or ""))
                 jobs = jobs_by_task.get(task_id, [])
-                status, done, total, complete = derive_status(task, jobs, material)
+                status, summary = derive_status(task, jobs, material)
+                details = status_details(status, summary, material)
                 rows.append({
                     "key": f"{project_name}::{task_id}", "project": project_name,
                     "task_id": task_id, "script": str(task.get("剧本名字") or ""),
                     "role": str(task.get("角色名字") or ""), "line": str(task.get("台词") or ""),
-                    "material": material, "status": status, "done": done, "total": total,
-                    "complete": complete, "source": str(source),
+                    "duration": str(task.get("时长") or "未填写"),
+                    "material": "素材未登记" if material in {"", "未知", "未登记"} else material,
+                    "status": status, **details,
+                    "done": summary["terminal_count"], "total": summary["total"],
+                    "success": summary["success"], "failed": summary["failed"],
+                    "running": summary["running"], "downloaded": summary["downloaded"],
+                    "terminal": summary["terminal"],
+                    "complete": summary["deliverables_ready"], "source": str(source),
+                    "source_name": source.name, "updated_at": latest_update(source, jobs),
                 })
     return sorted(rows, key=lambda item: (item["project"], item["task_id"]))
 
@@ -194,15 +278,17 @@ def scan_workspace(workspace: Path) -> list[dict]:
 def resolve_completed(workspace: Path, key: str) -> tuple[dict, list[Path]]:
     matches = [row for row in scan_workspace(workspace) if row["key"] == key]
     if len(matches) != 1 or not matches[0]["complete"]:
-        raise ValueError("任务尚未全部完成，不能执行成品操作")
+        raise ValueError("整批任务尚未终态，或成功版本尚未全部拉回，不能执行成品操作")
     project_name, task_id = key.split("::", 1)
     projects = dict(load_projects(workspace))
     root = projects[project_name]
     jobs = collect_jobs(find_named(root, "已生成视频", "02_生产成品/01_生成视频")).get(task_id, [])
     files = []
     for job in jobs:
+        if str(job.get("status") or "").lower() != "downloaded" or not files_exist(job):
+            continue
         for field in ("output", "mp3"):
-            path = Path(str(job[field])).resolve()
+            path = Path(str(job.get(field) or "")).resolve()
             if path.suffix.lower() in MEDIA_SUFFIXES and path.is_file() and path not in files:
                 files.append(path)
     if not files:
@@ -261,8 +347,8 @@ class VoiceDashboard:
         self.search_value = tk.StringVar()
         self.summary = tk.StringVar(value="正在读取任务")
         root.title("配音任务看板")
-        root.geometry("820x720")
-        root.minsize(560, 500)
+        root.geometry("980x760")
+        root.minsize(720, 520)
         root.configure(bg=BG)
         root.protocol("WM_DELETE_WINDOW", self.hide_to_tray)
         self.configure_styles()
@@ -355,17 +441,19 @@ class VoiceDashboard:
                 self.rows = rows
                 self.last_signature = signature
                 projects = ["全部项目"] + sorted({row["project"] for row in rows})
-                statuses = ["全部状态"] + sorted({row["status"] for row in rows})
+                statuses = ["全部状态"] + [stage for stage in STAGE_ORDER if any(
+                    row["stage"] == stage for row in rows)]
                 self.project_box.configure(values=projects)
                 self.status_box.configure(values=statuses)
                 if self.project_filter.get() not in projects:
                     self.project_filter.set("全部项目")
                 if self.status_filter.get() not in statuses:
                     self.status_filter.set("全部状态")
-                done = sum(1 for row in rows if row["complete"])
-                running = sum(1 for row in rows if row["status"] in {"已提交", "生成中", "可拉回"})
-                issues = sum(1 for row in rows if row["status"] in {"失败", "素材缺失", "素材待选择"})
-                self.summary.set(f"全部 {len(rows)}  ·  进行中 {running}  ·  完成 {done}  ·  需处理 {issues}")
+                producing = sum(row["stage"] == "生产中" for row in rows)
+                pullback = sum(row["stage"] == "待拉回" for row in rows)
+                delivered = sum(row["stage"] == "已交付" for row in rows)
+                issues = sum(row["requires_attention"] for row in rows)
+                self.summary.set(f"全部 {len(rows)}  ·  生产中 {producing}  ·  待拉回 {pullback}  ·  已交付 {delivered}  ·  需处理 {issues}")
                 self.footer.set(f"每2秒自动刷新  ·  工作区：{self.workspace}")
                 self.render()
         except Exception as error:
@@ -378,8 +466,9 @@ class VoiceDashboard:
         project, status, search = self.project_filter.get(), self.status_filter.get(), self.search_value.get().strip().lower()
         self.filtered = [row for row in self.rows
                          if (project == "全部项目" or row["project"] == project)
-                         and (status == "全部状态" or row["status"] == status)
-                         and (not search or any(search in str(row[field]).lower() for field in ("task_id", "role", "line", "script")))]
+                         and (status == "全部状态" or row["stage"] == status)
+                         and (not search or any(search in str(row[field]).lower() for field in (
+                             "task_id", "role", "line", "script", "status", "stage", "next_action", "source_name")))]
         if not self.filtered:
             tk.Label(self.list_frame, text="没有符合条件的配音任务", bg=BG, fg=MUTED,
                      font=("Microsoft YaHei UI", 10), pady=50).pack(fill="x")
@@ -393,32 +482,44 @@ class VoiceDashboard:
         card.pack(fill="x", padx=7, pady=(7, 0))
         top = tk.Frame(card, bg=PANEL)
         top.pack(fill="x", padx=12, pady=(10, 4))
-        tk.Label(top, text=task["task_id"], bg=PANEL, fg=TEXT, width=15, anchor="w",
+        tk.Label(top, text=task["task_id"], bg=PANEL, fg=TEXT, width=17, anchor="w",
                  font=("Microsoft YaHei UI", 10, "bold")).pack(side="left")
         tk.Label(top, text=f"{task['project']} / {task['script']}", bg=PANEL, fg=MUTED, anchor="w",
                  font=("Microsoft YaHei UI", 8)).pack(side="left", fill="x", expand=True)
-        status_color = {"已完成": GREEN, "失败": RED, "素材缺失": RED,
+        status_color = {"已完成": GREEN, "已结束（含失败）": AMBER,
+                        "已结束（全部失败）": RED, "拉回失败": RED, "素材缺失": RED,
                         "素材待选择": AMBER}.get(task["status"], BLUE if task["status"] in {"已提交", "生成中", "可拉回"} else MUTED)
-        tk.Label(top, text=task["status"], bg=PANEL, fg=status_color, width=9, anchor="e",
+        tk.Label(top, text=f"{task['stage']} · {task['status']}", bg=PANEL, fg=status_color, anchor="e",
                  font=("Microsoft YaHei UI", 9, "bold")).pack(side="right")
 
-        middle = tk.Frame(card, bg=PANEL)
-        middle.pack(fill="x", padx=12, pady=(0, 6))
-        tk.Label(middle, text=task["role"], bg=PANEL, fg=TEXT, width=9, anchor="w",
-                 font=("Microsoft YaHei UI", 9, "bold")).pack(side="left")
-        tk.Label(middle, text=task["line"], bg=PANEL, fg="#3c4853", anchor="w",
-                 font=("Microsoft YaHei UI", 9)).pack(side="left", fill="x", expand=True)
+        meta = tk.Frame(card, bg=PANEL)
+        meta.pack(fill="x", padx=12, pady=(0, 4))
+        tk.Label(meta, text=f"角色：{task['role']}  ·  时长：{task['duration']}  ·  素材：{task['material']}",
+                 bg=PANEL, fg=MUTED, anchor="w", font=("Microsoft YaHei UI", 8)).pack(fill="x")
+        tk.Label(card, text=f"更新：{task['updated_at'] or '暂无'}  ·  来源：{task['source_name']}",
+                 bg=PANEL, fg=MUTED, anchor="w", font=("Microsoft YaHei UI", 8)).pack(
+                     fill="x", padx=12, pady=(0, 4))
+
+        tk.Label(card, text=task["line"] or "（未填写台词）", bg=PANEL, fg="#3c4853", anchor="w",
+                 justify="left", wraplength=620, font=("Microsoft YaHei UI", 9)).pack(
+                     fill="x", padx=12, pady=(0, 7))
+
+        progress = tk.Frame(card, bg=PANEL)
+        progress.pack(fill="x", padx=12, pady=(0, 6))
+        total, done = task["total"], task["done"]
+        percent = round(done / total * 100) if total else 0
+        ttk.Progressbar(progress, style="Voice.Horizontal.TProgressbar", maximum=100, value=percent,
+                        length=180).pack(side="left", fill="x", expand=True)
+        counts = (f"终态 {done}/{total}  成功 {task['success']}  失败 {task['failed']}  "
+                  f"运行 {task['running']}  已下载 {task['downloaded']}") if total else "—"
+        tk.Label(progress, text=counts, bg=PANEL, fg=MUTED,
+                 font=("Microsoft YaHei UI", 8)).pack(side="left", padx=(10, 0))
 
         bottom = tk.Frame(card, bg=PANEL)
         bottom.pack(fill="x", padx=12, pady=(0, 10))
-        total, done = task["total"], task["done"]
-        percent = round(done / total * 100) if total else 0
-        ttk.Progressbar(bottom, style="Voice.Horizontal.TProgressbar", maximum=100, value=percent,
-                        length=160).pack(side="left", fill="x", expand=True)
-        tk.Label(bottom, text=f"{done}/{total}" if total else "—", bg=PANEL, fg=MUTED, width=7,
-                 font=("Segoe UI", 9)).pack(side="left", padx=(8, 5))
-        tk.Label(bottom, text=f"素材：{task['material']}", bg=PANEL, fg=MUTED,
-                 font=("Microsoft YaHei UI", 8)).pack(side="left", padx=(0, 8))
+        action_color = RED if task["requires_attention"] else BLUE
+        tk.Label(bottom, text=f"下一步：{task['next_action']}", bg=PANEL, fg=action_color,
+                 anchor="w", font=("Microsoft YaHei UI", 8, "bold")).pack(side="left", fill="x", expand=True)
         if task["complete"]:
             tk.Button(bottom, text="成品链接", command=lambda key=task["key"]: self.open_output(key),
                       bg="#e8edf1", fg=TEXT, activebackground="#dbe2e7", relief="flat", cursor="hand2",

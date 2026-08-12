@@ -61,10 +61,18 @@ py -3 scripts/run_pipeline.py --project-root <project_root> --run --direct-mp3 -
 py -3 scripts/run_pipeline.py --project-root <project_root> --submit-only --task-id <task_id> --max-workers 16
 ```
 
-“拉回”：只查询保存的 ID，不重新提交、不上传素材、不用 `--force-regenerate`。
+“监控”：只查询保存的 ID，不重新提交、不上传素材、不下载局部成功结果、不用 `--force-regenerate`。
 
 ```powershell
-py -3 scripts/run_pipeline.py --project-root <project_root> --resume-only --poll-once --direct-mp3 --task-id <task_id> --max-workers 16
+py -3 scripts/run_pipeline.py --project-root <project_root> --resume-only --monitor-only --poll-once --task-id <task_id> --max-workers 16
+```
+
+每次读取输出中的 `success`、`failed`、`running`、`total`。只有 `total > 0` 且 `success + failed == total` 才是整批远端终态；在此之前监控继续等待，绝不能通知拉回 Chat。
+
+“拉回”：不查询、不重新提交、不上传素材、不用 `--force-regenerate`。拉回命令会再次执行同一终态门禁，未终态时直接拒绝；终态后只下载成功版本，失败版本保留在状态和看板计数中。
+
+```powershell
+py -3 scripts/run_pipeline.py --project-root <project_root> --resume-only --pullback-only --direct-mp3 --task-id <task_id> --max-workers 16
 ```
 
 输出视频进入 `已生成视频\<任务名>`，完整音轨 MP3 进入 `已转mp3\<任务名>`，远端状态保存在输出目录 `.seedance-state.json`。

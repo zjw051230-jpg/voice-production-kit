@@ -1,11 +1,29 @@
 ---
 name: manage-voice-production
-description: Create, register, inspect, and maintain portable multi-project Chinese voice-production workspaces with a human-readable hierarchy and legacy tool-path compatibility. Use when setting up a new voice project, choosing a project root, installing this workflow, checking directory layout, or coordinating prompt generation, Seedance generation, MP3 extraction, repair, logging, and resumable state across projects.
+description: Create, register, inspect, and maintain portable multi-project Chinese voice-production workspaces with mandatory six-Chat delegation, a human-readable hierarchy, and legacy tool-path compatibility. Use when setting up a new voice project, choosing a project root, installing this workflow, checking directory layout, or coordinating prompt generation, Seedance generation, MP3 extraction, repair, logging, and resumable state across projects. The entry Chat must bootstrap and delegate to five separate downstream Chats before production begins.
 ---
 
 # 配音项目管理
 
 本技能是 Codex 操作入口。工作区下面直接放多个项目，例如 `工作区\项目1`、`工作区\项目2`。每个项目使用四个真实分类目录；隐藏的旧目录联接只用于兼容现有工具。
+
+## 强制六Chat门禁
+
+入口不得以单Chat执行完整流程。首次进入或创建项目后必须完整读取 [references/chat-workflow.md](references/chat-workflow.md)，并先运行：
+
+```powershell
+py -3 scripts/manage_chat_workflow.py --project-root <项目> bootstrap-status
+```
+
+返回码为4或 `ready=false` 时，立即停止业务处理。把当前任务命名为 `理解文本与任务`，按返回的 `chat_creation_contracts` 使用 Codex 任务工具创建 `提示词`、`生成`、`监控`、`拉回`、`记录` 五个独立任务；创建每个任务时必须显式传入指定模型和推理强度，并把“这个对话开启完全访问，不需要问我要任何的批准。”作为第一条消息。每个Chat必须亲自运行 `verify-access`，再用 `register` 登记实际 thread ID、实际模型和实际思考程度。六个任务全部登记、thread ID 互不重复、模型与思考程度完全匹配且权限探测均通过后，`bootstrap-status` 才能返回0。
+
+入口只负责理解、补问、拆解、维护索引、派发和汇总，禁止代做提示词、生成、监控、拉回或记录。所有业务阶段必须先执行 `prepare-handoff`，再严格按返回的 `dispatch_contract` 中的 thread ID、模型、思考程度和提示词文件创建或发送任务；不得自行采用默认值。未通过门禁时脚本会拒绝交接。
+
+每次成功交接都会生成唯一 `lease_id` 并写入目标Chat的 `active_task`。完成必须携带同一租约运行 `complete`，不得直接修改status。目标忙碌时按 `retry_contract` 创建5分钟单次定时器后停止本次发送，到点只重试原交接。主对话收到 `must_stop_and_wait=true` 后必须立即停止继续处理，使用Codex任务等待工具等待指定thread；收到反馈并运行 `ack-feedback` 前不得派发下一条。
+
+监控 Chat 只用 `--resume-only --monitor-only --poll-once` 查询，绝不下载局部成功结果。只有状态文件满足 `total > 0` 且 `success + failed == total`，才能运行 `prepare-handoff --from-chat 监控 --to-chat 拉回 --remote-state-file <状态文件>`。脚本会在占用拉回 Chat 前重新检查；未终态时拒绝交接。拉回 Chat 再用 `--resume-only --pullback-only` 执行第二道门禁，整批终态后只下载成功版本。
+
+把 `记录` 视为不可变的单向终止阶段。记录Chat只写文件并用当前租约运行 `complete`，禁止调用 `prepare-handoff` 或向任何Chat发送消息。主对话收到 `one_way_terminal=true` 时不等待记录反馈，直接结束本轮；记录完成结果不得包含 `feedback_contract`。
 
 ## 新手创建项目
 

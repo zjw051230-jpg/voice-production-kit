@@ -1,4 +1,4 @@
 interface:
   display_name: "配音项目管理"
   short_description: "创建、配置、验证并管理可移植的多项目配音生产工作区"
-  default_prompt: "使用 $manage-voice-production 创建或管理一个配音项目。"
+  default_prompt: "使用 $manage-voice-production 创建或管理一个配音项目；先完成六个独立Chat的分工门禁，再开始任何生产步骤。"

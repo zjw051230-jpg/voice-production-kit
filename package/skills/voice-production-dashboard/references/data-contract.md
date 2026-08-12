@@ -12,13 +12,13 @@
 
 ## 状态
 
-`失败` > `素材缺失` > `素材待选择` > `生成中` > `已提交` > `可拉回` > `已完成` > `提示词就绪` > `待准备`。
+主要状态为：`素材缺失`、`素材待选择`、`已提交`、`生成中`、`可拉回`、`拉回失败`、`已完成`、`已结束（含失败）`、`已结束（全部失败）`、`提示词就绪`、`待准备`。
 
-远端常见状态映射：`pending/submitted` 为已提交，`queued/processing/running` 为生成中，`succeeded/completed` 但未下载为可拉回，`downloaded` 且视频和 MP3 均存在才是已完成，`failed/error/cancelled` 为失败。
+远端常见状态映射：`pending/submitted` 为已提交，`queued/processing/running` 为运行中，`succeeded/completed` 为成功，`failed/error/cancelled/submit_failed` 为失败。只要仍有运行项，即使已有失败项也显示“生成中”。`postprocess_failed/download_blocked` 表示远端成功但本地拉回失败。
 
 ## 完成判定
 
-同一 `task_ID` 的状态文件至少有一个生成变体；所有变体必须是 `downloaded`；每个变体的 `output` 与 `mp3` 路径都必须存在。若没有远端状态记录，不根据相似文件名擅自判定完成。
+同一 `task_ID` 的状态文件至少有一个生成变体。远端整批终态固定为 `成功数 + 失败数 = 总数`。终态前禁止拉回。终态后，至少有一个成功版本且所有成功版本均为 `downloaded`、各自 `output` 与 `mp3` 均存在时，才允许成品操作；失败版本不需要媒体文件。若没有远端状态记录，不根据相似文件名擅自判定完成。
 
 ## 复制
 
