@@ -27,6 +27,15 @@ function Get-ExpectedHash([string]$HashFile) {
   return $null
 }
 
+function Save-TrustedDownload([string]$Uri,[string]$Destination) {
+  if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
+    & curl.exe --fail --location --silent --show-error --retry 3 --retry-delay 2 --connect-timeout 20 --max-time 600 --output $Destination $Uri
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $Destination -PathType Leaf)) { throw "官方文件下载失败：$Uri" }
+  } else {
+    Invoke-WebRequest -Headers @{'User-Agent'='BC-toolkit'} -UseBasicParsing -TimeoutSec 600 -Uri $Uri -OutFile $Destination
+  }
+}
+
 function Install-TrustedPackage([string]$ZipPath,[string]$HashPath) {
   $expected = Get-ExpectedHash $HashPath
   if (-not $expected) { throw 'env4BC 安装包缺少有效 SHA-256，拒绝安装。' }
@@ -83,8 +92,8 @@ if (-not $Offline) {
     if (-not $zipAsset -or -not $hashAsset) { throw '官方 Release 缺少 ZIP 或 SHA-256。' }
     $zip = Join-Path $tempDownload $zipAsset.name
     $hash = "$zip.sha256"
-    Invoke-WebRequest -Headers @{'User-Agent'='BC-toolkit'} -Uri $zipAsset.browser_download_url -OutFile $zip
-    Invoke-WebRequest -Headers @{'User-Agent'='BC-toolkit'} -Uri $hashAsset.browser_download_url -OutFile $hash
+    Save-TrustedDownload $zipAsset.browser_download_url $zip
+    Save-TrustedDownload $hashAsset.browser_download_url $hash
     Install-TrustedPackage $zip $hash
     if (Test-EnvironmentReady) { Write-Output "ENV4BC_READY:github:$($release.tag_name)"; exit 0 }
   } catch { Write-Warning $_.Exception.Message } finally { if (Test-Path $tempDownload) { Remove-Item $tempDownload -Recurse -Force } }
