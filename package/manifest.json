@@ -55,4 +55,21 @@
     "network-share delivery"
   ],
   "environment_dependency": "env4BC"
+  ,"architecture": {
+    "version": "3.0",
+    "top_level_directories": ["声音本体", "项目文件夹"],
+    "legacy_layout": "保留旧四大目录兼容映射，不自动迁移",
+    "task_summary_max_chars": 30,
+    "single_user_entry_chat": "任务理解与分配",
+    "skill_scopes": {
+      "official": "Codex Home\\skills（由官方更新覆盖）",
+      "user": "声音本体\\01_程序与工具\\用户Skills（更新永不覆盖）",
+      "user_categories": ["全局", "角色", "分任务"]
+    },
+    "special_update_20260813": {
+      "copy_source_before_split": true,
+      "backup_suffix": "-旧",
+      "work_on_copy_only": true
+    }
+  }
 }

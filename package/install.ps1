@@ -34,6 +34,13 @@ foreach ($skill in $manifest.skills) {
   Copy-Item -LiteralPath $source -Destination $target -Recurse
 }
 
+# 用户 Skills 与官方 Skills 分离：更新只覆盖上面的官方清单，永不覆盖用户目录。
+$userSkillRoot = Join-Path $WorkspaceRoot '声音本体\01_程序与工具\用户Skills'
+foreach ($dir in @('全局','角色','分任务')) { New-Item -ItemType Directory -Force -Path (Join-Path $userSkillRoot $dir) | Out-Null }
+if (-not (Test-Path -LiteralPath (Join-Path $userSkillRoot 'README.md'))) {
+  @('# 用户 Skills\n\n此目录可放全局、角色和分任务 Skill。官方更新永不覆盖这里的内容。\n') | Set-Content -Encoding UTF8 -LiteralPath (Join-Path $userSkillRoot 'README.md')
+}
+
 if (-not $UpdateOnly) {
   $creator = Join-Path $skillTarget 'manage-voice-production\scripts\create_voice_project.py'
   $createArgs = @('-3','-B','-X','utf8',$creator,'--workspace-root',$WorkspaceRoot,'--project-name',$ProjectName)
@@ -72,5 +79,5 @@ Write-Output 'Environment owner: env4BC (not modified by this installer)'
 $toolStateRoot = Join-Path $WorkspaceRoot '.voice-production-toolkit'
 New-Item -ItemType Directory -Force -Path $toolStateRoot | Out-Null
 Copy-Item -LiteralPath (Join-Path $packageRoot 'scripts\Update-Toolkit.ps1') -Destination (Join-Path $toolStateRoot 'Update-Toolkit.ps1') -Force
-[ordered]@{schema_version=1;repository='https://github.com/zjw051230-jpg/voice-production-toolkit4bingchuan';installed_version=$manifest.version;update_command="powershell -ExecutionPolicy Bypass -File `"$toolStateRoot\Update-Toolkit.ps1`" -WorkspaceRoot `"$WorkspaceRoot`"";managed_scope=@('Codex skills','.codex-dashboard');protected_scope=@('项目注册表.json','项目四大目录','.codex task records','API private configuration');updated_at=(Get-Date).ToString('o')} | ConvertTo-Json -Depth 6 | Set-Content -Encoding UTF8 -LiteralPath (Join-Path $toolStateRoot 'update-source.json')
+[ordered]@{schema_version=2;repository='https://github.com/zjw051230-jpg/voice-production-toolkit4bingchuan';installed_version=$manifest.version;update_command="powershell -ExecutionPolicy Bypass -File `"$toolStateRoot\Update-Toolkit.ps1`" -WorkspaceRoot `"$WorkspaceRoot`"";managed_scope=@('Codex official skills','.codex-dashboard','声音本体\01_程序与工具\用户Skills\README.md');user_skill_scope='声音本体\01_程序与工具\用户Skills';official_skill_scope=$skillTarget;protected_scope=@('声音本体\01_程序与工具\用户Skills','项目注册表.json','项目四大目录','.codex task records','API private configuration','素材','提示词','视频','MP3');updated_at=(Get-Date).ToString('o')} | ConvertTo-Json -Depth 6 | Set-Content -Encoding UTF8 -LiteralPath (Join-Path $toolStateRoot 'update-source.json')
 attrib +h $toolStateRoot | Out-Null
