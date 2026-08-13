@@ -1,5 +1,5 @@
 ﻿[CmdletBinding()]
-param([string]$WorkspaceRoot='D:\VoiceWorkspace',[string]$CodexHome='',[string]$DashboardShortcutPath='',[switch]$Offline)
+param([string]$WorkspaceRoot='D:\VoiceWorkspace',[string]$CodexHome='',[string]$DashboardShortcutPath='',[string]$Revision='latest',[switch]$Offline)
 $ErrorActionPreference='Stop'
 $repo='zjw051230-jpg/voice-production-toolkit4bingchuan'
 if($Offline){throw '离线模式不能访问 GitHub；请提供经校验的正式安装包给维护人员。'}
@@ -31,7 +31,8 @@ function Save-TrustedDownload([string]$Uri,[string]$Destination){
   else{Invoke-WebRequest -Headers @{'User-Agent'='BC-toolkit'} -UseBasicParsing -TimeoutSec 600 -Uri $Uri -OutFile $Destination}
 }
 try{
-  $release=Invoke-RestMethod -Headers @{Accept='application/vnd.github+json';'User-Agent'='BC-toolkit'} -Uri "https://api.github.com/repos/$repo/releases/latest"
+  $releaseUri=if($Revision -eq 'latest' -or [string]::IsNullOrWhiteSpace($Revision)){"https://api.github.com/repos/$repo/releases/latest"}else{"https://api.github.com/repos/$repo/releases/tags/$Revision"}
+  $release=Invoke-RestMethod -Headers @{Accept='application/vnd.github+json';'User-Agent'='BC-toolkit'} -Uri $releaseUri
   $zipAsset=@($release.assets|Where-Object {$_.name -match '^voice-production-toolkit-v.+\.zip$'})|Select-Object -First 1
   $hashAsset=@($release.assets|Where-Object {$_.name -eq ($zipAsset.name+'.sha256')})|Select-Object -First 1
   if(-not $zipAsset -or -not $hashAsset){throw '官方 Release 缺少 ZIP 或 SHA-256。'}

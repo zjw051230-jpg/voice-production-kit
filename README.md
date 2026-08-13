@@ -1,6 +1,6 @@
 # 配音工作流工具
 
-当前正式版本：`v3.0`。首次安装会把官方仓库和更新命令记录到工作区隐藏目录 `.voice-production-toolkit`。以后无需再次提供链接，只要对 Codex 说“更新配音工具”，Codex 就会读取记录、下载官方正式 Release、校验 SHA-256，并只更新工具白名单。
+当前正式版本：`v3.0`。官方 GitHub 地址是：<https://github.com/zjw051230-jpg/voice-production-toolkit4bingchuan>。首次安装和后续更新都由 Codex 从这个地址获取。
 
 环境资源不足时执行三级钩子：先使用已安装 env4BC；再尝试带 SHA-256 的本机 env4BC 包或官方 `zjw051230-jpg/env4BC` Release；仍无法安全补齐则立即停止并提示联系维护人员。禁止从第三方站点下载。
 
@@ -11,6 +11,12 @@
 安装与更新严格执行“缺什么改什么”，只修改清单声明的工具文件。绝不扫描、整理、迁移、改名、覆盖或删除项目素材、生成视频、MP3、交付版本、日志、隐藏任务记录或用户 API 配置。
 
 ## 快速安装
+
+新电脑直接把下面这句话发给 Codex，安装 GitHub 上的最新正式版本：
+
+```text
+在“https://github.com/zjw051230-jpg/voice-production-toolkit4bingchuan”上安装最新配音工具
+```
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File ".\package\install.ps1" -WorkspaceRoot "D:\配音工作区" -ProjectName "项目名称"
@@ -25,6 +31,20 @@ powershell -ExecutionPolicy Bypass -File ".\package\install.ps1" -WorkspaceRoot 
 ```
 
 Codex 会继续收集剧本、台词、角色音色和 API 状态，并建立六个独立任务完成提示词、生成、监控、拉回和记录。
+
+## 一句话更新
+
+```text
+在“https://github.com/zjw051230-jpg/voice-production-toolkit4bingchuan”上执行最新更新
+```
+
+指定轮次或 Release 标签：
+
+```text
+在“https://github.com/zjw051230-jpg/voice-production-toolkit4bingchuan”上执行20260813轮更新
+```
+
+“最新”读取 GitHub `releases/latest`；指定轮次读取同名 Release 标签。
 
 ## 环境依赖
 

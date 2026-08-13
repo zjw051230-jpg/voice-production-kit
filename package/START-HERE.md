@@ -8,9 +8,19 @@
 
 新架构说明见 `新架构设计-v3.md`。声音本体只放工具、Skills、模板、短索引和日志；素材、台词、提示词、视频和 MP3 只放项目文件夹，跨目录只使用快捷方式。
 
-以后更新只需把下面一句话发给 Codex，完成后无需继续操作：
+以后安装或更新只需把下面一句话发给 Codex，完成后无需继续操作。
 
-`在“git链接”上执行20260813轮更新`
+安装最新正式版本：
+
+`在“https://github.com/zjw051230-jpg/voice-production-toolkit4bingchuan”上安装最新配音工具`
+
+更新最新正式版本：
+
+`在“https://github.com/zjw051230-jpg/voice-production-toolkit4bingchuan”上执行最新更新`
+
+更新指定轮次：
+
+`在“https://github.com/zjw051230-jpg/voice-production-toolkit4bingchuan”上执行20260813轮更新`
 
 本次更新会先保留 `源文件夹-旧`，再在同名副本上处理。官方 Skills 会与官网同步覆盖，用户 Skills 保留在 `声音本体\01_程序与工具\用户Skills`，更新永不覆盖。
 

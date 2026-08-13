@@ -20,7 +20,7 @@ description: Create, register, inspect, and maintain portable multi-project Chin
 
 ## 处理工具更新请求
 
-用户说“更新配音工具”“配音工具需要更新”或同义请求时，不得对工作区执行 Git 同步。读取 `<WorkspaceRoot>\.voice-production-toolkit\update-source.json`，确认仓库严格等于 `https://github.com/zjw051230-jpg/voice-production-toolkit4bingchuan`，然后运行其中记录的本机 `Update-Toolkit.ps1`，由 Codex 自动从官方 Release 拉取所需 ZIP 和 SHA-256 校验文件。
+用户说“安装最新配音工具”“更新配音工具”“执行最新更新”或“执行 YYYYMMDD 轮更新”时，不得对工作区执行 Git 同步。固定使用官方仓库 `https://github.com/zjw051230-jpg/voice-production-toolkit4bingchuan`：最新读取 `releases/latest`，指定轮次读取同名 Release 标签；运行 `Update-Toolkit.ps1 -Revision latest` 或 `-Revision <轮次>`，自动拉取 ZIP 并校验 SHA-256。
 
 更新只允许修改声明的工具白名单。已有项目按新架构建立分类快捷方式和路径索引：角色音色、剧本、任务 JSON、成品和交付资料只做非破坏性暴露，原文件不移动、不改名、不覆盖。更新器必须在本地维护受保护路径清单并进行前后比对；素材、提示词、视频、MP3、日志、交付版本、API 私有配置或隐藏 `.codex` 发生变化就立即中止并报告。普通更新禁止扫描后整理或迁移素材；只有用户另行确认迁移清单时才允许迁移。
 
