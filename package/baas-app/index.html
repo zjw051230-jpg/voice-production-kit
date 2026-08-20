@@ -31,6 +31,29 @@
       <p class="hint">应用 Key 可公开嵌入前端；API Key、CC Switch 数据库和 Seedance 配置不放在这里。</p>
     </section>
 
+    <section class="dialogue-generator panel">
+      <div class="section-title">
+        <div><h2>台词生成器</h2><p class="muted">填写自己的兼容 OpenAI API，按剧本和要求生成可直接使用的台词。</p></div>
+        <span class="badge">只在当前页面使用</span>
+      </div>
+      <div class="grid three dialogue-config">
+        <label>API 地址<input id="dialogueApiBase" type="url" autocomplete="off" placeholder="https://api.example.com/v1"></label>
+        <label>模型名称<input id="dialogueModel" type="text" autocomplete="off" placeholder="例如 deepseek-chat"></label>
+        <label>API Key<input id="dialogueApiKey" type="password" autocomplete="new-password" placeholder="只保存在当前页面内存"></label>
+      </div>
+      <div class="grid two dialogue-inputs">
+        <label>剧本<textarea id="scriptInput" rows="8" placeholder="粘贴剧本、剧情总览或上下文"></textarea></label>
+        <label>台词需求<textarea id="dialogueRequirement" rows="8" placeholder="例如：角色月儿，回答姐姐，语速略慢，克制但带关切，只生成一句台词：不到十分钟。"></textarea></label>
+      </div>
+      <div class="dialogue-actions">
+        <button id="generateDialogue" class="primary">生成台词</button>
+        <span class="hint">API Key 不会保存、上传 BaaS 或写入日志。</span>
+      </div>
+      <div id="dialogueNotice" class="notice" role="status">等待输入剧本和台词要求。</div>
+      <label class="result-label">生成结果<textarea id="dialogueResult" rows="7" readonly placeholder="生成结果会显示在这里"></textarea></label>
+      <div class="dialogue-actions result-actions"><button id="copyDialogue" disabled>复制台词</button></div>
+    </section>
+
     <section class="summary grid five">
       <div class="metric"><span>本机任务</span><strong id="localCount">0</strong></div>
       <div class="metric"><span>进行中</span><strong id="runningCount">0</strong></div>

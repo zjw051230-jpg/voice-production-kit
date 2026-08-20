@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const state = { app: null, baasRows: [], localRows: [], demo: false, unsubscribe: null };
+  const state = { app: null, baasRows: [], localRows: [], demo: false, unsubscribe: null, dialogue: { text: "" } };
   const $ = (id) => document.getElementById(id);
   const configKeys = { appKey: "voice_baas_app_key", baseUrl: "voice_baas_base_url", agentUrl: "voice_local_agent_url" };
   const demoRows = [
@@ -23,6 +23,85 @@
 
   function say(text, kind) {
     const el = $("notice"); el.textContent = text; el.className = "notice" + (kind ? " " + kind : "");
+  }
+
+  function sayDialogue(text, kind) {
+    const el = $("dialogueNotice"); el.textContent = text; el.className = "notice" + (kind ? " " + kind : "");
+  }
+
+  function completionUrl(value) {
+    const base = String(value || "").trim().replace(/\/+$/, "");
+    if (/\/chat\/completions$/i.test(base)) return base;
+    return base + ( /\/v\d+(?:\.\d+)?$/i.test(base) ? "/chat/completions" : "/v1/chat/completions" );
+  }
+
+  function responseText(data) {
+    const content = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+    if (Array.isArray(content)) return content.map((part) => typeof part === "string" ? part : part && part.text || "").join("");
+    return typeof content === "string" ? content.trim() : "";
+  }
+
+  async function generateDialogue() {
+    const base = $("dialogueApiBase").value.trim();
+    const model = $("dialogueModel").value.trim();
+    const apiKey = $("dialogueApiKey").value.trim();
+    const script = $("scriptInput").value.trim();
+    const requirement = $("dialogueRequirement").value.trim();
+    if (!base || !model || !apiKey || !script || !requirement) {
+      sayDialogue("请填写 API 地址、模型名称、API Key、剧本和台词需求。", "error");
+      return;
+    }
+    const button = $("generateDialogue");
+    button.disabled = true;
+    $("copyDialogue").disabled = true;
+    $("dialogueResult").value = "";
+    sayDialogue("正在请求模型生成台词，请稍候……");
+    const payload = {
+      model,
+      temperature: 0.7,
+      messages: [
+        { role: "system", content: "你是中文影视配音台词编辑。根据用户提供的剧本和台词需求，生成可直接用于配音的中文台词。严格保留用户指定的角色、事实、情绪、语气和台词范围；不要擅自增加人物、旁白、动作、音效或解释。只输出最终台词文本，不要输出标题、分析、引号、Markdown 或前后说明；如果需要多句，每句单独一行。" },
+        { role: "user", content: "剧本/上下文：\n" + script + "\n\n台词需求：\n" + requirement + "\n\n请只返回最终台词。" }
+      ]
+    };
+    try {
+      const response = await fetch(completionUrl(base), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
+        body: JSON.stringify(payload)
+      });
+      const raw = await response.text();
+      let data = {};
+      try { data = raw ? JSON.parse(raw) : {}; } catch (_) { data = {}; }
+      if (!response.ok) {
+        const detail = data.error && (data.error.message || data.error.type) || raw.slice(0, 300) || response.statusText;
+        throw new Error("HTTP " + response.status + "：" + detail);
+      }
+      const text = responseText(data);
+      if (!text) throw new Error("模型返回为空或不是兼容的 chat/completions 格式。");
+      state.dialogue.text = text;
+      $("dialogueResult").value = text;
+      $("copyDialogue").disabled = false;
+      sayDialogue("台词已生成。API Key 仍只保留在当前页面内存。", "ok");
+    } catch (error) {
+      const message = error && error.message || String(error);
+      const corsHint = error instanceof TypeError ? " 可能是 API 不允许浏览器跨域，请改用支持 CORS 的地址或配置后端代理。" : "";
+      sayDialogue("生成失败：" + message + corsHint, "error");
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  async function copyDialogue() {
+    const text = state.dialogue.text || $("dialogueResult").value;
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      sayDialogue("台词已复制到剪贴板。", "ok");
+    } catch (_) {
+      const result = $("dialogueResult"); result.focus(); result.select();
+      sayDialogue("浏览器未授予剪贴板权限，已选中台词，请按 Ctrl+C 复制。", "error");
+    }
   }
 
   function escapeHtml(value) {
@@ -135,6 +214,8 @@
   $("refresh").addEventListener("click", () => { loadLocal(); loadBaas(); });
   $("sync").addEventListener("click", syncToBaas);
   $("demo").addEventListener("click", () => { state.demo = !state.demo; $("demo").textContent = state.demo ? "隐藏示例" : "显示示例"; render(); });
+  $("generateDialogue").addEventListener("click", generateDialogue);
+  $("copyDialogue").addEventListener("click", copyDialogue);
   ["appKey", "baseUrl", "agentUrl"].forEach((id) => $(id).value = localStorage.getItem(configKeys[id]) || $(id).value);
   loadLocal(); render();
 })();

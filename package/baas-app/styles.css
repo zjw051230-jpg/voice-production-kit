@@ -18,9 +18,19 @@ h2 { margin-bottom: 4px; font-size: 18px; letter-spacing: 0; }
 .config .hint { margin: 14px 0 0; }
 .grid { display: grid; gap: 12px; }
 .grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .grid.five { grid-template-columns: repeat(5, minmax(0, 1fr)); margin-bottom: 18px; }
 label { display: grid; gap: 6px; color: #53616a; font-size: 13px; }
-input { width: 100%; min-width: 0; border: 1px solid #ccd5db; border-radius: 5px; padding: 9px 10px; color: #172027; background: #fff; }
+input, textarea { width: 100%; min-width: 0; border: 1px solid #ccd5db; border-radius: 5px; padding: 9px 10px; color: #172027; background: #fff; }
+textarea { min-height: 128px; resize: vertical; line-height: 1.55; }
+input:focus, textarea:focus { outline: 2px solid rgba(34,94,168,.2); border-color: #225ea8; }
+.dialogue-generator { border-top: 3px solid #225ea8; }
+.dialogue-config { margin-bottom: 14px; }
+.dialogue-inputs { margin-bottom: 14px; }
+.dialogue-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.result-label { margin-top: 12px; }
+.result-label textarea { min-height: 150px; background: #f9fbfc; }
+.result-actions { justify-content: flex-end; margin-top: 10px; }
 .badge { border-radius: 999px; padding: 4px 9px; background: #edf1f3; color: #66737c; font-size: 12px; }
 .badge.ok { color: #11613f; background: #e2f3eb; }
 .badge.warn { color: #815600; background: #fff2d7; }
@@ -45,5 +55,5 @@ th { color: #66737c; font-size: 12px; font-weight: 650; white-space: nowrap; }
 .progress-bar i { display: block; height: 100%; background: #225ea8; }
 .empty { padding: 30px 9px; text-align: center; color: #66737c; }
 .footer { padding-top: 3px; text-align: center; }
-@media (max-width: 900px) { .grid.three, .grid.five { grid-template-columns: repeat(2, minmax(0, 1fr)); } .topbar, .section-title { align-items: flex-start; flex-direction: column; } }
-@media (max-width: 560px) { .shell { width: min(100% - 24px, 1500px); padding-top: 18px; } .grid.three, .grid.five { grid-template-columns: 1fr; } .panel { padding: 14px; } .actions { flex-wrap: wrap; } }
+@media (max-width: 900px) { .grid.three, .grid.five, .grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); } .topbar, .section-title { align-items: flex-start; flex-direction: column; } }
+@media (max-width: 560px) { .shell { width: min(100% - 24px, 1500px); padding-top: 18px; } .grid.three, .grid.five, .grid.two { grid-template-columns: 1fr; } .panel { padding: 14px; } .actions { flex-wrap: wrap; } }

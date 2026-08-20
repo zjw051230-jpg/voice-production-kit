@@ -34,6 +34,10 @@ Codex 会继续收集剧本、台词、角色音色和 API 状态，并建立提
 
 v3.0 还包含可选的 BaaS 协作应用原型，安装后位于工作区隐藏目录 `.voice-production-collab`。网页负责多人任务状态，本地代理继续负责 D 盘、Seedance、ffmpeg 和快捷方式。
 
+打开协作应用后，还可以在“台词生成器”中填写自己的兼容 OpenAI API、模型、剧本和台词要求，在线返回可复制台词。API Key 只在当前页面内存中使用，刷新后清空；遇到 CORS 错误时需要改用支持跨域的 API 或配置后端代理。
+
+仓库还包含 GitHub Pages 发布流程。将包含 `.github/workflows/deploy-dialogue-app.yml` 的变更合并到 `main` 并在仓库设置中启用 Pages（Source 选择 GitHub Actions）后，可直接打开 `https://<账号>.github.io/<仓库>/` 使用台词生成器。
+
 ## 更新
 
 更新 GitHub 最新正式版本：

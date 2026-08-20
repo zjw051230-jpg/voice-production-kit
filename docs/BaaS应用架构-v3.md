@@ -16,6 +16,14 @@
   └─ 提示词、Seedance、监控、拉回、MP3 和 API 配置
 ```
 
+## 在线台词生成
+
+页面内的“台词生成器”是一个独立的 OpenAI-compatible 客户端。用户在浏览器中填写自己的 API Base URL、模型名称、API Key、剧本和台词要求，前端向 `{base_url}/chat/completions` 发起一次请求，并把模型返回的中文台词显示为可复制文本。
+
+系统提示词固定约束模型：只输出最终台词，不输出分析、标题、旁白或额外人物；保留用户指定的角色、事实、情绪、语气和台词范围。用户可以在台词需求中继续指定角色、语速、时长、方言、情绪和是否只能说某一句。
+
+API Key 只存在当前页面的 JavaScript 内存中：不进 `localStorage`，不进 BaaS，不进 GitHub，不进日志，也不由本地代理接收。页面刷新后密钥清空。浏览器直接请求第三方 API 需要对方允许 CORS；不允许时应使用支持 CORS 的服务或自行部署后端代理，不能把密钥硬编码到静态网页。
+
 ## 已加入安装包的原型
 
 - `package/baas-app/`：静态 BaaS 前端，默认只读；用户点击“同步本机到 BaaS”后才写入 `tasks` 集合。
@@ -57,7 +65,7 @@ audit_events      操作审计
 py -3 .\local-agent\voice_agent.py --workspace-root "D:\配音工作区"
 ```
 
-然后打开 `baas-app/index.html` 或将该目录部署到静态托管。BaaS SSO 需要按 `baas.md` 的同域规则运行；未配置 appKey 时仍可使用本机扫描和示例模式。
+然后打开 `baas-app/index.html` 或将该目录部署到静态托管。仓库提供 `.github/workflows/deploy-dialogue-app.yml`，合并到 `main` 后会把该目录发布到 GitHub Pages；发布地址通常是 `https://<账号>.github.io/<仓库>/`。BaaS SSO 需要按 `baas.md` 的同域规则运行；未配置 appKey 时仍可使用本机扫描和示例模式，台词生成器仍可单独使用。
 
 ## 后续扩展
 
