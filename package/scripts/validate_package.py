@@ -49,7 +49,7 @@ def validate_package(package: Path) -> tuple[list[str], dict]:
     updater = (package / "scripts/Update-Toolkit.ps1").read_text(encoding="utf-8-sig", errors="ignore")
     if "zjw051230-jpg/env4BC" not in resolver or "SHA-256" not in resolver or "联系维护人员" not in resolver:
         errors.append("env4BC trust/stop contract is incomplete")
-    if "zjw051230-jpg/voice-production-toolkit4bingchuan" not in updater or "SHA-256" not in updater or "-UpdateOnly" not in updater:
+    if "zjw051230-jpg/voice-production-kit" not in updater or "SHA-256" not in updater or "-UpdateOnly" not in updater:
         errors.append("GitHub update contract is incomplete")
 
     for path in package.rglob("*"):

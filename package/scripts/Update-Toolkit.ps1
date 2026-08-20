@@ -1,7 +1,7 @@
 ﻿[CmdletBinding()]
 param([string]$WorkspaceRoot='D:\VoiceWorkspace',[string]$CodexHome='',[string]$DashboardShortcutPath='',[string]$Revision='latest',[switch]$Offline)
 $ErrorActionPreference='Stop'
-$repo='zjw051230-jpg/voice-production-toolkit4bingchuan'
+$repo='zjw051230-jpg/voice-production-kit'
 if($Offline){throw '离线模式不能访问 GitHub；请提供经校验的正式安装包给维护人员。'}
 $temp=Join-Path ([IO.Path]::GetTempPath()) ('voice-production-toolkit-'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $temp|Out-Null

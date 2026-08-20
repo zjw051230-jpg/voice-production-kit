@@ -14,15 +14,15 @@
 
 安装最新正式版本：
 
-`在“https://github.com/zjw051230-jpg/voice-production-toolkit4bingchuan”上安装最新配音工具`
+`在“https://github.com/zjw051230-jpg/voice-production-kit”上安装最新配音工具`
 
 更新最新正式版本：
 
-`在“https://github.com/zjw051230-jpg/voice-production-toolkit4bingchuan”上执行最新更新`
+`在“https://github.com/zjw051230-jpg/voice-production-kit”上执行最新更新`
 
 更新指定轮次：
 
-`在“https://github.com/zjw051230-jpg/voice-production-toolkit4bingchuan”上执行20260813轮更新`
+`在“https://github.com/zjw051230-jpg/voice-production-kit”上执行20260813轮更新`
 
 本次更新会先保留 `源文件夹-旧`，再在同名副本上处理。官方 Skills 会与官网同步覆盖，用户 Skills 保留在 `声音本体\01_程序与工具\用户Skills`，更新永不覆盖。
 

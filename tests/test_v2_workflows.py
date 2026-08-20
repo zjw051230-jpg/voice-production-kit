@@ -666,7 +666,7 @@ def test_documents() -> dict:
     assert docs["quick"].stat().st_size < docs["manual"].stat().st_size
     announcement = docs["announcement"].read_text(encoding="utf-8-sig")
     for required in (
-        "voice-production-toolkit4bingchuan", "develop/v2.1", "pull --ff-only",
+        "voice-production-kit", "develop/v2.1", "pull --ff-only",
         "install.ps1 -Force", "configure_ccswitch_model.py --dry-run",
         "从 v2.0 升级到 v2.1", "5.5 -> dpskv4", "不得调用 Seedance",
         "不得向服务器", "integrity_check: ok",
