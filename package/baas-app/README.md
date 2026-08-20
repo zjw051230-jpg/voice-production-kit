@@ -19,7 +19,7 @@ py -3 .\local-agent\voice_agent.py --workspace-root "D:\配音工作区"
 
 再用任意静态服务器打开本目录。直接双击 `index.html` 也能显示本地代理/示例模式；BaaS SSO 是否可用取决于浏览器同域和登录状态。
 
-在页面填写 Glacier BaaS 的公开 `appKey`，点击“连接 BaaS”。完成 SSO 后选择“冰川 AI”即可生成台词；冰川模式按当前登录用户额度计费，不需要填写第三方 API Key。
+页面已预置 Glacier BaaS 的公开 `appKey`。部署在冰川同域时点击“连接 BaaS”会自动 SSO；直接双击 `file://` 页面时，先点“打开冰川登录”在新标签完成登录，再回到本页点“连接 BaaS”。完成 SSO 后选择“冰川 AI”即可生成台词；冰川模式按当前登录用户额度计费，不需要填写第三方 API Key。
 
 ## 生成台词
 

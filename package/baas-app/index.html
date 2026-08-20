@@ -22,13 +22,13 @@
     </header>
 
     <section class="config panel">
-      <div class="section-title"><h2>连接配置</h2><span id="connectionState" class="badge">未连接</span></div>
+      <div class="section-title"><h2>连接配置</h2><div class="actions"><button id="glacierLogin">打开冰川登录</button><span id="connectionState" class="badge">未连接</span></div></div>
       <div class="grid three">
-        <label>应用 Key<input id="appKey" type="text" autocomplete="off" placeholder="pk_..."></label>
+        <label>应用 Key<input id="appKey" type="text" value="pk_3faa00eda1a447729ae15da2a55c45c7" autocomplete="off" placeholder="pk_..."></label>
         <label>BaaS 地址<input id="baseUrl" type="url" value="https://chat-test.q1.com/baas"></label>
         <label>本地代理地址<input id="agentUrl" type="url" value="http://127.0.0.1:8765"></label>
       </div>
-      <p class="hint">应用 Key 可公开嵌入前端；API Key、CC Switch 数据库和 Seedance 配置不放在这里。</p>
+      <p class="hint">已预置公开应用 Key。若当前是本地 file 页面，请先打开冰川登录，在新标签完成登录后回到本页再点“连接 BaaS”。</p>
     </section>
 
     <section class="dialogue-generator panel">

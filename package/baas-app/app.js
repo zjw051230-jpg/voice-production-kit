@@ -1,6 +1,7 @@
 (function () {
   "use strict";
 
+  const DEFAULT_BAAS_APP_KEY = "pk_3faa00eda1a447729ae15da2a55c45c7";
   const state = { app: null, baasRows: [], localRows: [], demo: false, unsubscribe: null, dialogue: { text: "" } };
   const $ = (id) => document.getElementById(id);
   const configKeys = { appKey: "voice_baas_app_key", baseUrl: "voice_baas_base_url", agentUrl: "voice_local_agent_url" };
@@ -11,7 +12,7 @@
 
   function getConfig() {
     return {
-      appKey: $("appKey").value.trim() || localStorage.getItem(configKeys.appKey) || "",
+      appKey: $("appKey").value.trim() || localStorage.getItem(configKeys.appKey) || DEFAULT_BAAS_APP_KEY,
       baseUrl: $("baseUrl").value.trim() || localStorage.getItem(configKeys.baseUrl) || "https://chat-test.q1.com/baas",
       agentUrl: $("agentUrl").value.trim() || localStorage.getItem(configKeys.agentUrl) || "http://127.0.0.1:8765"
     };
@@ -203,13 +204,29 @@
     if (!c.appKey) { say("请填写 appKey。它不是 API Key。", "error"); return; }
     try {
       state.app = window.GlacierBaaS.init({ appKey: c.appKey, baseUrl: c.baseUrl });
-      await state.app.auth.sso({ redirectOnGuest: true });
+      const localFilePage = location.protocol === "file:";
+      await state.app.auth.sso({ redirectOnGuest: !localFilePage });
       const me = state.app.auth.currentUser(); $("connectionState").textContent = me && (me.display_name || me.email) || "已登录"; $("connectionState").className = "badge ok";
       await loadBaas();
       if (state.unsubscribe) state.unsubscribe();
       state.unsubscribe = state.app.collection("tasks").subscribe(loadBaas);
       $("sync").disabled = false; say("BaaS 已连接，任务会实时刷新。", "ok");
-    } catch (error) { $("connectionState").textContent = "连接失败"; $("connectionState").className = "badge warn"; say("BaaS 连接失败：" + (error.message || error), "error"); }
+    } catch (error) {
+      $("connectionState").textContent = "连接失败"; $("connectionState").className = "badge warn";
+      if (location.protocol === "file:") {
+        say("本地 file 页面不能接收登录回跳。请先在新标签完成冰川登录，再回到本页重新点击“连接 BaaS”。", "error");
+      } else {
+        say("BaaS 连接失败：" + (error.message || error), "error");
+      }
+    }
+  }
+
+  function openGlacierLogin() {
+    const base = getConfig().baseUrl.replace(/\/baas\/?$/, "").replace(/\/+$/, "");
+    const loginUrl = window.GLACIER_LOGIN_URL || base + "/login";
+    const popup = window.open(loginUrl, "glacier-login", "noopener,noreferrer");
+    if (!popup) say("浏览器拦截了新标签，请允许弹窗后再打开冰川登录：" + loginUrl, "error");
+    else say("已在新标签打开冰川登录。登录完成后回到本页，再点击“连接 BaaS”。", "ok");
   }
 
   async function loadBaas() {
@@ -239,6 +256,7 @@
   }
 
   $("connectBaas").addEventListener("click", connectBaas);
+  $("glacierLogin").addEventListener("click", openGlacierLogin);
   $("refresh").addEventListener("click", () => { loadLocal(); loadBaas(); });
   $("sync").addEventListener("click", syncToBaas);
   $("demo").addEventListener("click", () => { state.demo = !state.demo; $("demo").textContent = state.demo ? "隐藏示例" : "显示示例"; render(); });
