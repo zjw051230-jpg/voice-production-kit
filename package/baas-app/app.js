@@ -41,14 +41,37 @@
     return typeof content === "string" ? content.trim() : "";
   }
 
+  function aiResponseText(data) {
+    if (typeof data === "string") return data.trim();
+    if (!data || typeof data !== "object") return "";
+    return String(data.content || data.text || data.reply || data.answer || responseText(data) || "").trim();
+  }
+
+  function setDialogueMode() {
+    const glacier = $("dialogueMode").value === "glacier";
+    document.querySelectorAll(".dialogue-external").forEach((el) => { el.hidden = glacier; });
+    $("dialogueModeHint").textContent = glacier
+      ? "冰川模式需要先连接 BaaS；剧本会发送到冰川 AI 处理。"
+      : "API Key 只保存在当前页面内存，不会上传 BaaS 或写入日志。";
+  }
+
   async function generateDialogue() {
+    const mode = $("dialogueMode").value;
     const base = $("dialogueApiBase").value.trim();
     const model = $("dialogueModel").value.trim();
     const apiKey = $("dialogueApiKey").value.trim();
     const script = $("scriptInput").value.trim();
     const requirement = $("dialogueRequirement").value.trim();
-    if (!base || !model || !apiKey || !script || !requirement) {
-      sayDialogue("请填写 API 地址、模型名称、API Key、剧本和台词需求。", "error");
+    if (!script || !requirement) {
+      sayDialogue("请填写剧本和台词需求。", "error");
+      return;
+    }
+    if (mode === "external" && (!base || !model || !apiKey)) {
+      sayDialogue("自有 API 模式还需要填写 API 地址、模型名称和 API Key。", "error");
+      return;
+    }
+    if (mode === "glacier" && (!state.app || !state.app.ai)) {
+      sayDialogue("请先点击“连接 BaaS”并完成冰川登录，再使用冰川 AI。", "error");
       return;
     }
     const button = $("generateDialogue");
@@ -65,24 +88,29 @@
       ]
     };
     try {
-      const response = await fetch(completionUrl(base), {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
-        body: JSON.stringify(payload)
-      });
-      const raw = await response.text();
-      let data = {};
-      try { data = raw ? JSON.parse(raw) : {}; } catch (_) { data = {}; }
-      if (!response.ok) {
-        const detail = data.error && (data.error.message || data.error.type) || raw.slice(0, 300) || response.statusText;
-        throw new Error("HTTP " + response.status + "：" + detail);
+      let text = "";
+      if (mode === "glacier") {
+        text = aiResponseText(await state.app.ai.chat(payload.messages, { temperature: 0.7 }));
+      } else {
+        const response = await fetch(completionUrl(base), {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
+          body: JSON.stringify(payload)
+        });
+        const raw = await response.text();
+        let data = {};
+        try { data = raw ? JSON.parse(raw) : {}; } catch (_) { data = {}; }
+        if (!response.ok) {
+          const detail = data.error && (data.error.message || data.error.type) || raw.slice(0, 300) || response.statusText;
+          throw new Error("HTTP " + response.status + "：" + detail);
+        }
+        text = responseText(data);
       }
-      const text = responseText(data);
-      if (!text) throw new Error("模型返回为空或不是兼容的 chat/completions 格式。");
+      if (!text) throw new Error("模型返回为空或格式无法识别。");
       state.dialogue.text = text;
       $("dialogueResult").value = text;
       $("copyDialogue").disabled = false;
-      sayDialogue("台词已生成。API Key 仍只保留在当前页面内存。", "ok");
+      sayDialogue(mode === "glacier" ? "冰川 AI 已生成台词。" : "台词已生成。API Key 仍只保留在当前页面内存。", "ok");
     } catch (error) {
       const message = error && error.message || String(error);
       const corsHint = error instanceof TypeError ? " 可能是 API 不允许浏览器跨域，请改用支持 CORS 的地址或配置后端代理。" : "";
@@ -214,8 +242,9 @@
   $("refresh").addEventListener("click", () => { loadLocal(); loadBaas(); });
   $("sync").addEventListener("click", syncToBaas);
   $("demo").addEventListener("click", () => { state.demo = !state.demo; $("demo").textContent = state.demo ? "隐藏示例" : "显示示例"; render(); });
+  $("dialogueMode").addEventListener("change", setDialogueMode);
   $("generateDialogue").addEventListener("click", generateDialogue);
   $("copyDialogue").addEventListener("click", copyDialogue);
   ["appKey", "baseUrl", "agentUrl"].forEach((id) => $(id).value = localStorage.getItem(configKeys[id]) || $(id).value);
-  loadLocal(); render();
+  setDialogueMode(); loadLocal(); render();
 })();

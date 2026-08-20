@@ -33,13 +33,14 @@
 
     <section class="dialogue-generator panel">
       <div class="section-title">
-        <div><h2>台词生成器</h2><p class="muted">填写自己的兼容 OpenAI API，按剧本和要求生成可直接使用的台词。</p></div>
+        <div><h2>台词生成器</h2><p class="muted">选择冰川 AI 或自己的兼容 API，按剧本和要求生成可直接使用的台词。</p></div>
         <span class="badge">只在当前页面使用</span>
       </div>
       <div class="grid three dialogue-config">
-        <label>API 地址<input id="dialogueApiBase" type="url" autocomplete="off" placeholder="https://api.example.com/v1"></label>
-        <label>模型名称<input id="dialogueModel" type="text" autocomplete="off" placeholder="例如 deepseek-chat"></label>
-        <label>API Key<input id="dialogueApiKey" type="password" autocomplete="new-password" placeholder="只保存在当前页面内存"></label>
+        <label>生成通道<select id="dialogueMode"><option value="glacier">冰川 AI（当前登录额度）</option><option value="external">自有 OpenAI-compatible API</option></select></label>
+        <label class="dialogue-external">API 地址<input id="dialogueApiBase" type="url" autocomplete="off" placeholder="https://api.example.com/v1"></label>
+        <label class="dialogue-external">模型名称<input id="dialogueModel" type="text" autocomplete="off" placeholder="例如 deepseek-chat"></label>
+        <label class="dialogue-external">API Key<input id="dialogueApiKey" type="password" autocomplete="new-password" placeholder="只保存在当前页面内存"></label>
       </div>
       <div class="grid two dialogue-inputs">
         <label>剧本<textarea id="scriptInput" rows="8" placeholder="粘贴剧本、剧情总览或上下文"></textarea></label>
@@ -47,7 +48,7 @@
       </div>
       <div class="dialogue-actions">
         <button id="generateDialogue" class="primary">生成台词</button>
-        <span class="hint">API Key 不会保存、上传 BaaS 或写入日志。</span>
+        <span id="dialogueModeHint" class="hint">冰川模式需要先连接 BaaS；剧本会发送到冰川 AI 处理。</span>
       </div>
       <div id="dialogueNotice" class="notice" role="status">等待输入剧本和台词要求。</div>
       <label class="result-label">生成结果<textarea id="dialogueResult" rows="7" readonly placeholder="生成结果会显示在这里"></textarea></label>
