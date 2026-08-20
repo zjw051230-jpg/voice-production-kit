@@ -8,7 +8,7 @@ New-Item -ItemType Directory -Path $temp|Out-Null
 function Get-ProtectedSnapshot([string]$Root){
   $rootPath=[IO.Path]::GetFullPath($Root).TrimEnd('\')
   if(-not (Test-Path -LiteralPath $rootPath)){ return @{} }
-  $ignored=@((Join-Path $rootPath '.voice-production-toolkit').TrimEnd('\'),(Join-Path $rootPath '.codex-dashboard').TrimEnd('\'))
+  $ignored=@((Join-Path $rootPath '.voice-production-toolkit').TrimEnd('\'),(Join-Path $rootPath '.codex-dashboard').TrimEnd('\'),(Join-Path $rootPath '.voice-production-collab').TrimEnd('\'))
   $result=[ordered]@{}
   Get-ChildItem -LiteralPath $rootPath -File -Recurse -Force -ErrorAction Stop | ForEach-Object {
     $full=$_.FullName

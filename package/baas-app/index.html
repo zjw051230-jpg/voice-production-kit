@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>配音生产协作台</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script src="https://chat-test.q1.com/baas/glacier-baas-sdk.js"></script>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">VOICE PRODUCTION</p>
+        <h1>配音生产协作台</h1>
+        <p class="muted">BaaS 负责协作状态，本地代理负责 D 盘生产文件。</p>
+      </div>
+      <div class="actions">
+        <button id="connectBaas" class="primary">连接 BaaS</button>
+        <button id="refresh">刷新</button>
+      </div>
+    </header>
+
+    <section class="config panel">
+      <div class="section-title"><h2>连接配置</h2><span id="connectionState" class="badge">未连接</span></div>
+      <div class="grid three">
+        <label>应用 Key<input id="appKey" type="text" autocomplete="off" placeholder="pk_..."></label>
+        <label>BaaS 地址<input id="baseUrl" type="url" value="https://chat-test.q1.com/baas"></label>
+        <label>本地代理地址<input id="agentUrl" type="url" value="http://127.0.0.1:8765"></label>
+      </div>
+      <p class="hint">应用 Key 可公开嵌入前端；API Key、CC Switch 数据库和 Seedance 配置不放在这里。</p>
+    </section>
+
+    <section class="summary grid five">
+      <div class="metric"><span>本机任务</span><strong id="localCount">0</strong></div>
+      <div class="metric"><span>进行中</span><strong id="runningCount">0</strong></div>
+      <div class="metric"><span>待处理</span><strong id="attentionCount">0</strong></div>
+      <div class="metric"><span>已完成</span><strong id="completeCount">0</strong></div>
+      <div class="metric"><span>本地代理</span><strong id="agentState">未连接</strong></div>
+    </section>
+
+    <section class="panel">
+      <div class="section-title">
+        <div><h2>任务状态</h2><p class="muted">自动合并本机扫描结果和 BaaS 任务记录。</p></div>
+        <div class="actions"><button id="sync" disabled>同步本机到 BaaS</button><button id="demo">显示示例</button></div>
+      </div>
+      <div id="notice" class="notice" role="status">正在初始化。</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>项目</th><th>任务</th><th>角色 / 台词</th><th>状态</th><th>进度</th><th>更新时间</th><th></th></tr></thead>
+          <tbody id="taskRows"><tr><td colspan="7" class="empty">暂无任务</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer class="muted footer">本页面不运行 Seedance、不读取 API 密钥；生成、监控、拉回和转 MP3 仍由本机 Skills 负责。</footer>
+  </main>
+  <script src="./app.js"></script>
+</body>
+</html>

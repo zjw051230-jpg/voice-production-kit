@@ -92,6 +92,9 @@ def validate_install(workspace: Path, project_name: str, codex_home: Path, manif
     config = dashboard.parent / "dashboard-config.json"
     if not dashboard.is_file() or not config.is_file():
         errors.append("installed voice dashboard is incomplete")
+    collab = workspace / ".voice-production-collab"
+    if not (collab / "baas-app" / "index.html").is_file() or not (collab / "local-agent" / "voice_agent.py").is_file():
+        errors.append("installed BaaS collaboration app is incomplete")
     if (workspace / ".codex-tools").exists():
         errors.append("voice installer must not create environment tool directory")
     return errors

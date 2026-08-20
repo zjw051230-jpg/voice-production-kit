@@ -1,7 +1,7 @@
 {
   "name": "portable-voice-production",
   "version": "3.0",
-  "released": "2026-08-11",
+  "released": "2026-08-20",
   "previous_version": "2.2",
   "changes": [
     "Separated CC Switch, Seedance API configuration tools, exact model routing, Python and ffmpeg environment management into env4BC",
@@ -27,7 +27,8 @@
     "Added the complete local Seedance API configuration workflow and endpoint rules",
     "Added a guarded CC Switch database configurator for provider.meta.localProxyRequestOverrides.modelRoutes without touching Codex model catalogs",
     "Added backup, dry-run, integrity verification, request verification, and rollback instructions",
-    "Kept credentials, live databases, production media, servers, and D:\\codex-board outside the package"
+    "Kept credentials, live databases, production media, servers, and D:\\codex-board outside the package",
+    "Added an optional Glacier BaaS collaboration app and loopback-only local workspace agent"
   ],
   "platform": "Windows",
   "skills": [
@@ -46,6 +47,10 @@
   },
   "bundled_programs": {
     "voice_dashboard": "program/配音任务看板.exe"
+  },
+  "bundled_resources": {
+    "baas_collaboration_app": "baas-app/",
+    "local_agent": "local-agent/voice_agent.py"
   },
   "excluded": [
     "API keys and credentials",

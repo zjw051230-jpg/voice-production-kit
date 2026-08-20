@@ -11,3 +11,5 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1 -WorkspaceRoot "D:\配音
 更新只处理清单声明的工具文件。同名 skill 只有用户批准并使用 `-Force` 时才先备份后替换。更新由 Codex 自动从官方 Release 下载并校验所需内容；已有素材只建立新分类快捷方式和索引，不移动、不改名、不覆盖。项目素材、成品、交付、历史版本、日志、隐藏任务清单和 API 私有配置永不作为安装或更新目标，更新器会在本地检查这些受保护内容未发生变化。
 
 环境缺失时三级处理：已安装 env4BC、本机带 SHA-256 的可信包、官方 env4BC GitHub Release。三者都失败时必须停止并提示用户联系维护人员，禁止搜索或安装第三方来源。
+
+安装器会把 BaaS 协作前端和本地回环代理放到工作区隐藏目录 `.voice-production-collab`。它们只同步任务元数据，不保存 API Key，也不替代本机 Seedance、ffmpeg 或原生看板。

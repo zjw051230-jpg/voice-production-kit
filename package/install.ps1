@@ -58,6 +58,18 @@ Copy-Item -LiteralPath (Join-Path $skillTarget 'voice-production-dashboard\scrip
 [ordered]@{schema_version=2;workspace_root=[IO.Path]::GetFullPath($WorkspaceRoot);app_mode='desktop-exe';copy_mode='copy-only-no-overwrite';installed_version=$manifest.version;updated_at=(Get-Date).ToString('o')} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $dashboardApp 'dashboard-config.json') -Encoding UTF8
 attrib +h $dashboardRoot | Out-Null
 
+# BaaS 协作层：只放静态前端和本地回环代理，不放素材、密钥或生产状态。
+$collabRoot = Join-Path $WorkspaceRoot '.voice-production-collab'
+$collabApp = Join-Path $collabRoot 'baas-app'
+$collabAgent = Join-Path $collabRoot 'local-agent'
+New-Item -ItemType Directory -Force -Path $collabRoot | Out-Null
+New-Item -ItemType Directory -Force -Path $collabApp, $collabAgent | Out-Null
+Copy-Item -LiteralPath (Join-Path $packageRoot 'baas-app\*') -Destination $collabApp -Recurse -Force
+Copy-Item -LiteralPath (Join-Path $packageRoot 'local-agent\*') -Destination $collabAgent -Recurse -Force
+Copy-Item -LiteralPath (Join-Path $skillTarget 'voice-production-dashboard\scripts\voice_dashboard.py') -Destination (Join-Path $collabAgent 'voice_dashboard.py') -Force
+[ordered]@{schema_version=1;workspace_root=[IO.Path]::GetFullPath($WorkspaceRoot);app_root=$collabApp;agent_script=(Join-Path $collabAgent 'voice_agent.py');agent_bind='127.0.0.1';agent_port=8765;materials_touched=$false;updated_at=(Get-Date).ToString('o')} | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $collabRoot 'collab-config.json') -Encoding UTF8
+attrib +h $collabRoot | Out-Null
+
 if (-not $DashboardShortcutPath) { $DashboardShortcutPath = Join-Path ([Environment]::GetFolderPath('Desktop')) '配音任务看板.lnk' }
 $shell = New-Object -ComObject WScript.Shell
 $shortcut = $shell.CreateShortcut([IO.Path]::GetFullPath($DashboardShortcutPath))
